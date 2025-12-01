@@ -124,3 +124,10 @@ local Button = HouseTab:CreateButton({
    -- The function that takes place when the button is pressed
    end,
 })
+
+local Button = HouseTab:CreateButton({
+   Name = "Paste House",
+   Callback = function()
+   -- The function that takes place when the button is pressed
+   end,
+})
