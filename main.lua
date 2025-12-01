@@ -195,7 +195,18 @@ local Button = HouseTab:CreateButton({
 
 -- ========== SCANNER ==========
 
-
+local Label5 = ScannerTab:CreateLabel("Home Type: Tiny Home", "milestone")
+local Button = ScannerTab:CreateButton({
+   Name = "Scan House",
+   Callback = function(scan_notify)
+	local scan_notify = Rayfield:Notify({
+       Title = "Scanning Home..",
+       Content = "Starting Scan",
+       Duration = 3.5,
+       Image = "play",
+    })
+   end,
+})
 
 
 
