@@ -35,6 +35,8 @@ local SaveTab = MainWindow:CreateTab("Guardar", "file") -- Title, Image
 local OthersTab = MainWindow:CreateTab("Otros", "circle-ellipsis") -- Title, Image
 
 
+-- ========== OTROS ==========
+
 local Button = OthersTab:CreateButton({
    Name = "Default Theme",
    Callback = function(Default)
@@ -53,6 +55,7 @@ local Button = OthersTab:CreateButton({
 
 
 -- ========== PRINCIPAL ==========
+
 local UserInputService = game:GetService("UserInputService")
 local Players = game:GetService("Players")
 local localPlayer = Players.LocalPlayer
@@ -154,7 +157,6 @@ local SliderJumpPower = MainTab:CreateSlider({
 
 -- ========== HOUSE CLONER ==========
 
-
 local Label1 = HouseTab:CreateLabel("Furnitures count: 0", "sofa")
 local Label2 = HouseTab:CreateLabel("Furnitures cost: 0$", "badge-dollar-sign")
 local Label3 = HouseTab:CreateLabel("Textures cost: 0$", "paint-roller")
@@ -192,3 +194,14 @@ local Button = HouseTab:CreateButton({
 
 
 -- ========== SCANNER ==========
+
+
+
+
+
+
+
+
+
+-- ========== CONSOLE MESSAGE ==========
+print("ShadowX Hub ha cargado correctamente")
