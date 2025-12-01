@@ -52,49 +52,107 @@ local Button = OthersTab:CreateButton({
 
 
 
-local Toggle = MainTab:CreateToggle({
-	Name = "Salto Infinito",
-	CurrentValue = false,
-	Flag = "Toggle1", -- A flag is the identifier for the configuration file, make sure every element has a different flag if you're using configuration saving to ensure no overlaps
-	Callback = function(InfiniteJumpEnabled)
-        local InfiniteJumpEnabled = true
-        game:GetService("UserInputService").JumpRequest:connect(function()
-            if InfiniteJumpEnabled then
-                game:GetService"Players".LocalPlayer.Character:FindFirstChildOfClass'Humanoid':ChangeState("Jumping")
-            end
-        end)
-	end,
+-- ========== PRINCIPAL ==========
+local UserInputService = game:GetService("UserInputService")
+local Players = game:GetService("Players")
+local localPlayer = Players.LocalPlayer
+
+local infiniteJumpConnection -- almacenará la conexión
+local infiniteJumpEnabled = false
+
+local ToggleInfiniteJump = MainTab:CreateToggle({
+    Name = "Salto Infinito",
+    CurrentValue = false,
+    Flag = "InfiniteJumpFlag",
+    Callback = function(value)
+        infiniteJumpEnabled = value
+
+        if infiniteJumpEnabled and not infiniteJumpConnection then
+            infiniteJumpConnection = UserInputService.JumpRequest:Connect(function()
+                local character = localPlayer.Character
+                if not character then return end
+                local humanoid = character:FindFirstChildOfClass("Humanoid")
+                if humanoid and infiniteJumpEnabled then
+                    humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+                end
+            end)
+        end
+
+
+        if not infiniteJumpEnabled and infiniteJumpConnection then
+            infiniteJumpConnection:Disconnect()
+            infiniteJumpConnection = nil
+        end
+    end,
+})
+
+localPlayer.CharacterRemoving:Connect(function()
+    if infiniteJumpConnection then
+        infiniteJumpConnection:Disconnect()
+        infiniteJumpConnection = nil
+    end
+end)
+
+local walkSpeedValue = 10
+local function setWalkSpeed(v)
+    walkSpeedValue = v
+    local char = localPlayer.Character
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    if hum then
+        pcall(function() hum.WalkSpeed = tonumber(v) or 16 end)
+    end
+end
+
+localPlayer.CharacterAdded:Connect(function(char)
+    local hum = char:WaitForChild("Humanoid", 5)
+    if hum then
+        pcall(function() hum.WalkSpeed = walkSpeedValue end)
+    end
+end)
+
+local SliderWalkSpeed = MainTab:CreateSlider({
+    Name = "Velocidad al Caminar",
+    Range = {10, 250},
+    Increment = 10,
+    Suffix = "Velocidad",
+    CurrentValue = 10,
+    Flag = "WalkSpeedFlag",
+    Callback = function(v)
+        setWalkSpeed(v)
+    end,
+})
+
+local jumpPowerValue = 50
+local function setJumpPower(v)
+    jumpPowerValue = v
+    local char = localPlayer.Character
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    if hum then
+        pcall(function() hum.JumpPower = tonumber(v) or hum.JumpPower end)
+    end
+end
+
+localPlayer.CharacterAdded:Connect(function(char)
+    local hum = char:WaitForChild("Humanoid", 5)
+    if hum then
+        pcall(function() hum.JumpPower = jumpPowerValue end)
+    end
+end)
+
+local SliderJumpPower = MainTab:CreateSlider({
+    Name = "Poder de Salto",
+    Range = {10, 500},
+    Increment = 10,
+    Suffix = "Salto",
+    CurrentValue = 50,
+    Flag = "JumpPowerFlag",
+    Callback = function(v)
+        setJumpPower(v)
+    end,
 })
 
 
-
-local Slider = MainTab:CreateSlider({
-	Name = "Velocidad al Caminar",
-	Range = {10, 250},
-	Increment = 10,
-	Suffix = "Velocidad",
-	CurrentValue = 10,
-	Flag = "Slider1", -- A flag is the identifier for the configuration file, make sure every element has a different flag if you're using configuration saving to ensure no overlaps
-	Callback = function(v)
-		game.Players.LocalPlayer.Character.Humanoid.WalkSpeed = v
-	end,
-})
-
-
-
-local Slider = MainTab:CreateSlider({
-	Name = "Poder de Salto",
-	Range = {10, 500},
-	Increment = 10,
-	Suffix = "Salto",
-	CurrentValue = 10,
-	Flag = "Slider1", -- A flag is the identifier for the configuration file, make sure every element has a different flag if you're using configuration saving to ensure no overlaps
-	Callback = function(v)
-		game.Players.LocalPlayer.Character.Humanoid.JumpPower = v
-	end,
-})
-
-
+-- ========== HOUSE CLONER ==========
 
 
 local Label1 = HouseTab:CreateLabel("Furnitures count: 0", "sofa")
@@ -131,3 +189,6 @@ local Button = HouseTab:CreateButton({
    -- The function that takes place when the button is pressed
    end,
 })
+
+
+-- ========== SCANNER ==========
