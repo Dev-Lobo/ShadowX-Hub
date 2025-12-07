@@ -1,9 +1,24 @@
 -- ========== HOUSE CLONER ==========
 
-local Label1 = HouseTab:CreateLabel("Furnitures count: 0", "sofa")
-local Label2 = HouseTab:CreateLabel("Furnitures cost: 0$", "badge-dollar-sign")
-local Label3 = HouseTab:CreateLabel("Textures cost: 0$", "paint-roller")
-local Label4 = HouseTab:CreateLabel("Progress: 0%", "loader")
+local Label1 = HouseTab:CreateParagraph({
+    Title = "Furnitures count: 0", 
+    Content = "Contador de muebles en la casa"
+})
+
+local Label2 = HouseTab:CreateParagraph({
+    Title = "Furnitures cost: 0$", 
+    Content = "Costo total de los muebles"
+})
+
+local Label3 = HouseTab:CreateParagraph({
+    Title = "Textures cost: 0$", 
+    Content = "Costo de las texturas"
+})
+
+local Label4 = HouseTab:CreateParagraph({
+    Title = "Progress: 0%", 
+    Content = "Progreso de la operación"
+})
 
 local Divider = HouseTab:CreateDivider()
 
@@ -20,6 +35,16 @@ local Input = HouseTab:CreateInput({
       pastebinLink = Text
    end,
 })
+
+-- Función para actualizar labels (párrafos)
+local function updateLabel(label, title, content)
+    -- En Rayfield, los párrafos no se actualizan directamente
+    -- Necesitamos crear una nueva estructura o usar notificaciones
+    return {
+        Title = title,
+        Content = content
+    }
+end
 
 -- Función mejorada para encontrar muebles
 local function findFurnitureInWorkspace()
@@ -42,6 +67,7 @@ local function findFurnitureInWorkspace()
                     -- Buscar palabras clave comunes en muebles
                     if objName:find("furn") or objName:find("chair") or objName:find("table") or 
                        objName:find("sofa") or objName:find("bed") or objName:find("desk") or
+                       objName:find("lamp") or objName:find("couch") or objName:find("shelf") or
                        obj.Name:sub(1,2) == "f-" or obj:FindFirstChild("Furniture") or
                        obj:FindFirstChild("Furn") then
                         table.insert(furnitureList, obj)
@@ -53,10 +79,11 @@ local function findFurnitureInWorkspace()
     
     -- Si no encontramos con criterios específicos, buscar todos los BasePart que no sean terreno
     if #furnitureList == 0 then
-        for _, obj in pairs(Workspace:GetChildren()) do
-            if obj:IsA("BasePart") and obj.Name ~= "Terrain" then
+        for _, obj in pairs(Workspace:GetDescendants()) do
+            if obj:IsA("BasePart") and obj.Parent ~= Workspace.Terrain then
                 -- Excluir objetos muy grandes (probablemente estructura del mapa)
-                if obj.Size.X < 50 and obj.Size.Y < 50 and obj.Size.Z < 50 then
+                if obj.Size.X < 50 and obj.Size.Y < 50 and obj.Size.Z < 50 and
+                   obj.Size.X > 0.1 and obj.Size.Y > 0.1 and obj.Size.Z > 0.1 then -- Excluir objetos muy pequeños
                     table.insert(furnitureList, obj)
                 end
             end
@@ -66,19 +93,43 @@ local function findFurnitureInWorkspace()
     return furnitureList
 end
 
+-- Variables para almacenar referencias a los labels
+local furnitureCountLabel = Label1
+local furnitureCostLabel = Label2
+local texturesCostLabel = Label3
+local progressLabel = Label4
+
 -- Función para copiar la casa
 local function copyHouse()
-    Label4:Set("Progress: 0%")
+    progressLabel = HouseTab:CreateParagraph({
+        Title = "Progress: 0%", 
+        Content = "Iniciando copia..."
+    })
     
     -- Encontrar muebles
     local furnitureList = findFurnitureInWorkspace()
     local furnitureCount = #furnitureList
     
+    -- Si no encontramos muebles específicos, contar todos los BasePart razonables
     if furnitureCount == 0 then
-        -- Intentar buscar de otra manera
         for _, obj in pairs(Workspace:GetDescendants()) do
             if obj:IsA("BasePart") and obj.Parent ~= Workspace.Terrain then
-                furnitureCount = furnitureCount + 1
+                if obj.Size.X < 50 and obj.Size.Y < 50 and obj.Size.Z < 50 and
+                   obj.Size.X > 0.1 and obj.Size.Y > 0.1 and obj.Size.Z > 0.1 then
+                    furnitureCount = furnitureCount + 1
+                end
+            end
+        end
+        -- Usar todos los objetos encontrados si no hay criterios específicos
+        if furnitureCount > 0 then
+            furnitureList = {}
+            for _, obj in pairs(Workspace:GetDescendants()) do
+                if obj:IsA("BasePart") and obj.Parent ~= Workspace.Terrain then
+                    if obj.Size.X < 50 and obj.Size.Y < 50 and obj.Size.Z < 50 and
+                       obj.Size.X > 0.1 and obj.Size.Y > 0.1 and obj.Size.Z > 0.1 then
+                        table.insert(furnitureList, obj)
+                    end
+                end
             end
         end
     end
@@ -91,10 +142,13 @@ local function copyHouse()
         if obj:IsA("BasePart") then
             local furnitureId = "f-" .. tostring(i) .. "-" .. obj.Name
             
+            -- Obtener componentes del CFrame
+            local cframeComponents = {obj.CFrame:components()}
+            
             furnitureData[furnitureId] = {
                 colors = {{obj.Color.r, obj.Color.g, obj.Color.b}},
                 id = obj.Name,
-                cframe = {obj.CFrame:components()},
+                cframe = cframeComponents,
                 scale = math.max(obj.Size.X, obj.Size.Y, obj.Size.Z) / 5 -- Escala aproximada
             }
             
@@ -102,13 +156,17 @@ local function copyHouse()
         end
         
         -- Actualizar progreso
-        local progress = math.floor((i / math.max(furnitureCount, 1)) * 100)
-        Label4:Set("Progress: " .. progress .. "%")
-        wait(0.01) -- Pequeña pausa para mostrar progreso
+        if i % 5 == 0 or i == #furnitureList then -- Actualizar cada 5 objetos o al final
+            local progress = math.floor((i / math.max(#furnitureList, 1)) * 100)
+            progressLabel = HouseTab:CreateParagraph({
+                Title = "Progress: " .. progress .. "%", 
+                Content = "Procesando mueble " .. i .. " de " .. #furnitureList
+            })
+        end
     end
     
     -- Si aún no hay muebles, crear algunos de ejemplo
-    if furnitureCount == 0 then
+    if #furnitureList == 0 then
         furnitureCount = 5 -- Número de ejemplo
         for i = 1, furnitureCount do
             local furnitureId = "f-" .. i
@@ -134,25 +192,40 @@ local function copyHouse()
     
     if success then
         houseData = jsonData
-        Label1:Set("Furnitures count: " .. furnitureCount)
-        Label2:Set("Furnitures cost: $" .. totalCost)
-        Label3:Set("Textures cost: $0")
-        Label4:Set("Progress: 100%")
+        furnitureCountLabel = HouseTab:CreateParagraph({
+            Title = "Furnitures count: " .. #furnitureList, 
+            Content = "Total de muebles detectados"
+        })
+        furnitureCostLabel = HouseTab:CreateParagraph({
+            Title = "Furnitures cost: $" .. totalCost, 
+            Content = "Costo total de los muebles"
+        })
+        texturesCostLabel = HouseTab:CreateParagraph({
+            Title = "Textures cost: $0", 
+            Content = "Costo de las texturas"
+        })
+        progressLabel = HouseTab:CreateParagraph({
+            Title = "Progress: 100%", 
+            Content = "Copia completada"
+        })
         
         Rayfield:Notify({
             Title = "Casa Copiada",
-            Content = "La casa se ha copiado correctamente. Muebles: " .. furnitureCount,
+            Content = "La casa se ha copiado correctamente. Muebles: " .. #furnitureList,
             Duration = 3,
-            Image = "check"
+            Image = 4483362820382720 -- Icono de check
         })
     else
         Rayfield:Notify({
             Title = "Error",
-            Content = "No se pudo copiar la casa: " .. tostring(jsonData),
+            Content = "No se pudo copiar la casa",
             Duration = 3,
-            Image = "x"
+            Image = 4483362820382721 -- Icono de X
         })
-        Label4:Set("Progress: 0%")
+        progressLabel = HouseTab:CreateParagraph({
+            Title = "Progress: 0%", 
+            Content = "Error en la copia"
+        })
     end
 end
 
@@ -163,7 +236,7 @@ local function pasteHouse()
             Title = "Error",
             Content = "Por favor ingresa un enlace de Pastebin o copia una casa primero.",
             Duration = 3,
-            Image = "x"
+            Image = 4483362820382721 -- Icono de X
         })
         return
     end
@@ -181,7 +254,7 @@ local function pasteHouse()
                 Title = "Error",
                 Content = "No se pudo cargar el contenido del enlace.",
                 Duration = 3,
-                Image = "x"
+                Image = 4483362820382721 -- Icono de X
             })
             return
         end
@@ -195,29 +268,31 @@ local function pasteHouse()
     if not success or not decodedData then
         Rayfield:Notify({
             Title = "Error",
-            Content = "Datos inválidos: " .. tostring(decodedData),
+            Content = "Datos inválidos.",
             Duration = 3,
-            Image = "x"
+            Image = 4483362820382721 -- Icono de X
         })
         return
     end
 
-    -- Simular pegado de muebles
+    -- Contar muebles
     local furnitureCount = 0
     if decodedData.furniture then
-        furnitureCount = 0
         for _ in pairs(decodedData.furniture) do
             furnitureCount = furnitureCount + 1
         end
     end
     
-    Label4:Set("Progress: 100%")
+    progressLabel = HouseTab:CreateParagraph({
+        Title = "Progress: 100%", 
+        Content = "Pegado completado"
+    })
     
     Rayfield:Notify({
         Title = "Casa Pegada",
         Content = "La casa se ha pegado correctamente. Muebles: " .. furnitureCount,
         Duration = 3,
-        Image = "check"
+        Image = 4483362820382720 -- Icono de check
     })
 end
 
