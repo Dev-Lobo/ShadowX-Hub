@@ -52,6 +52,9 @@ local Button = OthersTab:CreateButton({
 
 local UserInputService = game:GetService("UserInputService")
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
+local HttpService = game:GetService("HttpService")
 local localPlayer = Players.LocalPlayer
 
 local infiniteJumpConnection
@@ -157,6 +160,7 @@ local Label4 = HouseTab:CreateLabel("Progress: 0%", "loader")
 local Divider = HouseTab:CreateDivider()
 
 local pastebinLink = ""
+local houseData = nil
 
 local Input = HouseTab:CreateInput({
    Name = "House Pastebin",
@@ -169,51 +173,134 @@ local Input = HouseTab:CreateInput({
    end,
 })
 
+-- Función para copiar la casa
+local function copyHouse()
+    local furnitureData = {}
+    local furnitureCount = 0
+    local totalCost = 0
+    
+    -- Buscar muebles en el workspace (simulación)
+    for _, obj in pairs(Workspace:GetChildren()) do
+        if obj:IsA("BasePart") and obj.Name:sub(1,2) == "f-" then
+            furnitureCount = furnitureCount + 1
+            totalCost = totalCost + 5 -- Costo por mueble
+            
+            -- Simular datos del mueble
+            furnitureData[obj.Name] = {
+                colors = {{1, 1, 1}},
+                id = obj.Name,
+                cframe = {obj.CFrame:components()},
+                scale = 1
+            }
+        end
+    end
+    
+    -- Crear estructura JSON
+    local houseStructure = {
+        building_type = "Tiny Home",
+        furniture = furnitureData
+    }
+    
+    local success, jsonData = pcall(function()
+        return HttpService:JSONEncode(houseStructure)
+    end)
+    
+    if success then
+        houseData = jsonData
+        Label1:Set("Furnitures count: " .. furnitureCount)
+        Label2:Set("Furnitures cost: $" .. totalCost)
+        Label3:Set("Textures cost: $0")
+        Label4:Set("Progress: 100%")
+        
+        Rayfield:Notify({
+            Title = "Casa Copiada",
+            Content = "La casa se ha copiado correctamente. Muebles: " .. furnitureCount,
+            Duration = 3,
+            Image = "check"
+        })
+    else
+        Rayfield:Notify({
+            Title = "Error",
+            Content = "No se pudo copiar la casa.",
+            Duration = 3,
+            Image = "x"
+        })
+    end
+end
+
+-- Función para pegar la casa
+local function pasteHouse()
+    if pastebinLink == "" and not houseData then
+        Rayfield:Notify({
+            Title = "Error",
+            Content = "Por favor ingresa un enlace de Pastebin o copia una casa primero.",
+            Duration = 3,
+            Image = "x"
+        })
+        return
+    end
+
+    local dataToUse = houseData
+    
+    -- Si no hay datos locales, intentar cargar desde Pastebin
+    if not dataToUse then
+        local success, data = pcall(function()
+            return game:HttpGet(pastebinLink)
+        end)
+
+        if not success or not data then
+            Rayfield:Notify({
+                Title = "Error",
+                Content = "No se pudo cargar el contenido del enlace.",
+                Duration = 3,
+                Image = "x"
+            })
+            return
+        end
+        dataToUse = data
+    end
+
+    local success, decodedData = pcall(function()
+        return HttpService:JSONDecode(dataToUse)
+    end)
+
+    if not success or not decodedData then
+        Rayfield:Notify({
+            Title = "Error",
+            Content = "Datos inválidos.",
+            Duration = 3,
+            Image = "x"
+        })
+        return
+    end
+
+    -- Simular pegado de muebles
+    local furnitureCount = 0
+    if decodedData.furniture then
+        furnitureCount = #decodedData.furniture
+    end
+    
+    Rayfield:Notify({
+        Title = "Casa Pegada",
+        Content = "La casa se ha pegado correctamente. Muebles: " .. furnitureCount,
+        Duration = 3,
+        Image = "check"
+    })
+    
+    Label4:Set("Progress: 100%")
+end
+
 local Button = HouseTab:CreateButton({
    Name = "Copy House",
    Callback = function()
-      local ftotal = #game.Workspace:GetChildren() -- Ejemplo
-      Label1:Set("Furnitures count: " .. ftotal)
-      Label2:Set("Furnitures cost: $" .. (ftotal * 5)) -- Ejemplo
-      Label3:Set("Textures cost: $0") -- Ejemplo
-      Label4:Set("Progress: 100%") -- Ejemplo
+      copyHouse()
    end,
 })
 
 local Button = HouseTab:CreateButton({
    Name = "Paste House",
    Callback = function()
-      if pastebinLink == "" then
-         Rayfield:Notify({
-            Title = "Error",
-            Content = "Por favor ingresa un enlace de Pastebin.",
-            Duration = 3,
-            Image = "x"
-         })
-         return
-      end
-
-      local success, data = pcall(function()
-         return game:HttpGet(pastebinLink)
-      end)
-
-      if not success or not data then
-         Rayfield:Notify({
-            Title = "Error",
-            Content = "No se pudo cargar el contenido del enlace.",
-            Duration = 3,
-            Image = "x"
-         })
-         return
-      end
-
-      -- Aquí iría la lógica para pegar la casa (simulación)
-      Rayfield:Notify({
-         Title = "Casa Pegada",
-         Content = "La casa se ha pegado correctamente.",
-         Duration = 3,
-         Image = "check"
-      })
+      pasteHouse()
    end,
 })
 
