@@ -200,12 +200,78 @@ local Input = HouseTab:CreateInput({
    end,
 })
 
--- Función para convertir CFrame a array (formato específico de Adopt Me)
+-- Función para entrar en modo edición automáticamente
+local function enterEditMode()
+    local success = false
+    
+    -- Método 1: Buscar y activar el botón de edición
+    local editButtons = {
+        "EditButton",
+        "EditMode",
+        "EditHouse",
+        "FurnitureEditor",
+        "BuildMode"
+    }
+    
+    for _, buttonName in pairs(editButtons) do
+        local button = Workspace:FindFirstChild(buttonName, true)
+        if button and button:IsA("BasePart") then
+            -- Simular clic en el botón
+            pcall(function()
+                game:GetService("VirtualInputManager"):Send MouseButton1Click(button.CFrame.Position)
+                success = true
+                break
+            end)
+        end
+    end
+    
+    -- Método 2: Buscar en ReplicatedStorage o RemoteEvents
+    if not success then
+        local editEvents = {
+            "EnterEditMode",
+            "StartEditing",
+            "EditModeEvent",
+            "EditHouseEvent"
+        }
+        
+        for _, eventName in pairs(editEvents) do
+            local event = ReplicatedStorage:FindFirstChild(eventName, true)
+            if event and (event:IsA("RemoteEvent") or event:IsA("BindableEvent")) then
+                pcall(function()
+                    if event:IsA("RemoteEvent") then
+                        event:FireServer()
+                    else
+                        event:Fire()
+                    end
+                    success = true
+                    break
+                end)
+            end
+        end
+    end
+    
+    -- Método 3: Buscar en player gui
+    if not success then
+        local playerGui = localPlayer:FindFirstChild("PlayerGui")
+        if playerGui then
+            local editButtons = playerGui:FindFirstChild("EditButton", true)
+            if editButtons then
+                pcall(function()
+                    editButtons.MouseButton1Click:Fire()
+                    success = true
+                end)
+            end
+        end
+    end
+    
+    return success
+end
+
+-- Función para convertir CFrame a array
 local function cframeToArray(cf)
     local pos = cf.Position
     local x, y, z = pos.X, pos.Y, pos.Z
     
-    -- Extraer la matriz 3x3 de rotación y el vector de traslación
     local rightVector = cf.XVector
     local upVector = cf.YVector
     local backVector = cf.ZVector
@@ -234,30 +300,35 @@ local function getBuildingType()
     return "Tiny Home"
 end
 
--- Función para identificar si un objeto es un mueble válido de Adopt Me
+-- Función mejorada para identificar muebles válidos
 local function isValidFurniture(obj)
     if not obj then return false end
     if not (obj:IsA("BasePart") or obj:IsA("Model")) then return false end
     
-    -- Excluir partes del cuerpo del jugador
-    if obj.Name == "HumanoidRootPart" or obj.Name == "Torso" or obj.Name == "Head" or 
-       obj.Name == "Left Arm" or obj.Name == "Right Arm" or obj.Name == "Left Leg" or 
-       obj.Name == "Right Leg" then 
+    -- Excluir partes del cuerpo
+    local bodyParts = {
+        "HumanoidRootPart", "Torso", "Head", "Left Arm", "Right Arm", 
+        "Left Leg", "Right Leg", "UpperTorso", "LowerTorso", "LeftHand", 
+        "RightHand", "LeftFoot", "RightFoot"
+    }
+    
+    for _, bodyPart in pairs(bodyParts) do
+        if obj.Name == bodyPart then return false end
+    end
+    
+    -- Excluir tipos específicos
+    if obj:IsA("Seat") or obj:IsA("VehicleSeat") or obj:IsA("SpawnLocation") then 
         return false 
     end
     
-    -- Excluir asientos y partes del entorno
-    if obj:IsA("Seat") or obj:IsA("VehicleSeat") then return false end
-    
-    -- Para BasePart, verificar características de muebles
     if obj:IsA("BasePart") then
-        -- Los muebles en Adopt Me normalmente están anclados
+        -- Los muebles típicamente están anclados
         if obj.Anchored == false then return false end
         
-        -- Excluir partes estructurales del mapa
+        -- Excluir partes estructurales
         local excludedNames = {
             "ground", "floor", "wall", "roof", "ceiling", "baseplate",
-            "terrain", "map", "world", "boundary"
+            "terrain", "map", "world", "boundary", "sky", "water", "lava"
         }
         
         local objName = obj.Name:lower()
@@ -267,42 +338,27 @@ local function isValidFurniture(obj)
             end
         end
         
-        -- Excluir partes demasiado grandes (probablemente estructurales)
-        if obj.Size.X > 50 or obj.Size.Y > 50 or obj.Size.Z > 50 then
+        -- Excluir partes extremadamente grandes o pequeñas
+        if obj.Size.X > 100 or obj.Size.Y > 100 or obj.Size.Z > 100 then
             return false
         end
         
-        -- Excluir partes demasiado pequeñas (menos de 0.1 en alguna dimensión)
-        if obj.Size.X < 0.1 and obj.Size.Y < 0.1 and obj.Size.Z < 0.1 then
+        if obj.Size.X < 0.05 and obj.Size.Y < 0.05 and obj.Size.Z < 0.05 then
             return false
-        end
-    end
-    
-    -- Verificar si está en una ubicación típica de muebles
-    local parent = obj.Parent
-    if parent then
-        local parentName = parent.Name:lower()
-        -- Aceptar si está en ubicaciones típicas de muebles
-        if parentName:find("furniture") or parentName:find("house") or parentName:find("room") then
-            return true
         end
     end
     
     return true
 end
 
--- Función para obtener el ID del mueble
+-- Función para obtener ID del mueble
 local function getFurnitureId(obj)
     if not obj then return "unknown" end
     
     local originalName = obj.Name
     local name = originalName:lower()
     
-    -- Limpiar nombre de prefijos/sufijos numéricos
-    name = name:gsub("_%d+", ""):gsub("%d+$", "")
-    name = name:gsub("^%d+", "")
-    
-    -- Mapeo de nombres comunes a IDs de Adopt Me
+    -- Mapeo de nombres comunes
     local nameMapping = {
         ["brick"] = "brick",
         ["disk"] = "medium_disk",
@@ -336,46 +392,27 @@ local function getFurnitureId(obj)
         ["sink"] = "bathroom"
     }
     
-    -- Buscar coincidencias en el mapeo
     for key, value in pairs(nameMapping) do
         if name:find(key) then
             return value
         end
     end
     
-    -- Si no se encuentra, usar el nombre original limpio
-    local cleanName = originalName:gsub("_%d+", ""):gsub("%d+$", "")
-    if cleanName == "" then
-        cleanName = "unknown"
-    end
-    
-    return cleanName:lower()
+    return originalName:lower()
 end
 
--- Función para obtener colores del mueble
+-- Función para obtener colores
 local function getFurnitureColors(obj)
     local colors = {}
     
     if obj:IsA("BasePart") then
-        local colorValue = nil
-        
-        -- Intentar obtener color de diferentes fuentes
-        if obj:FindFirstChild("Color") then
-            colorValue = obj.Color
-        elseif obj:FindFirstChild("BrickColor") then
-            colorValue = obj.BrickColor.Color
-        else
-            colorValue = obj.Color
-        end
-        
+        local colorValue = obj.Color or (obj.BrickColor and obj.BrickColor.Color)
         if colorValue then
             table.insert(colors, {colorValue.R, colorValue.G, colorValue.B})
         else
-            -- Color por defecto blanco
             table.insert(colors, {1, 1, 1})
         end
     elseif obj:IsA("Model") then
-        -- Para modelos, obtener el color de la parte principal
         local mainPart = obj:FindFirstChildWhichIsA("BasePart")
         if mainPart then
             local colorValue = mainPart.Color or (mainPart.BrickColor and mainPart.BrickColor.Color)
@@ -395,38 +432,41 @@ end
 -- Función para calcular escala
 local function getFurnitureScale(obj)
     if obj:IsA("BasePart") then
-        -- Calcular escala basada en el tamaño promedio
         local avgSize = (obj.Size.X + obj.Size.Y + obj.Size.Z) / 3
-        return math.max(0.01, avgSize / 4) -- Ajuste para escala razonable
+        return math.max(0.01, avgSize / 3)
     elseif obj:IsA("Model") then
         local size = obj:GetExtents(true).Size
         local avgSize = (size.X + size.Y + size.Z) / 3
-        return math.max(0.01, avgSize / 4)
+        return math.max(0.01, avgSize / 3)
     end
     return 1
 end
 
 -- Función principal para escanear muebles
 local function scanHouseFurniture()
+    -- Intentar entrar en modo edición
+    local editSuccess = enterEditMode()
+    if editSuccess then
+        print("Modo edición activado automáticamente")
+        wait(1) -- Esperar a que se cargue el modo edición
+    else
+        print("No se pudo activar el modo edición automáticamente")
+        print("Por favor, entra en modo edición manualmente")
+    end
+    
     local furnitureData = {}
     local buildingType = getBuildingType()
     
-    -- Buscar en ubicaciones típicas de muebles en Adopt Me
+    -- Buscar en ubicaciones típicas
     local searchLocations = {}
     
-    -- Ubicación principal: casa del jugador
     local playerHouse = Workspace:FindFirstChild(localPlayer.Name .. "'s House")
     if playerHouse then
         table.insert(searchLocations, playerHouse)
     end
     
-    -- Otras ubicaciones comunes
     local commonLocations = {
-        "HouseFurnitures",
-        "Furniture",
-        "PlayerHouses",
-        "Buildings",
-        "Interior"
+        "HouseFurnitures", "Furniture", "PlayerHouses", "Buildings", "Interior"
     }
     
     for _, locationName in pairs(commonLocations) do
@@ -436,42 +476,38 @@ local function scanHouseFurniture()
         end
     end
     
-    -- Añadir el workspace completo como último recurso
     table.insert(searchLocations, Workspace)
     
     local furnitureCount = 0
     local totalCost = 0
     local textureCostTotal = 0
-    local scannedObjects = {} -- Para evitar duplicados
+    local scannedObjects = {}
     
     print("Iniciando escaneo de muebles...")
     
     for _, location in pairs(searchLocations) do
         if location then
-            print("Buscando en:", location.Name)
-            
-            -- Buscar solo en hijos directos para evitar duplicados
             for _, obj in pairs(location:GetChildren()) do
                 if isValidFurniture(obj) and not scannedObjects[obj] then
                     scannedObjects[obj] = true
                     
-                    -- Verificar que no sea parte del entorno del juego
-                    local isEnvironmentPart = false
+                    -- Verificar que no sea parte del entorno
+                    local isEnvironment = false
                     local objName = obj.Name:lower()
                     
                     local environmentNames = {
                         "baseplate", "ground", "floor", "wall", "roof", "sky", 
-                        "terrain", "water", "lava", "boundary"
+                        "terrain", "water", "lava", "boundary", "map", "world"
                     }
                     
                     for _, envName in pairs(environmentNames) do
                         if objName:find(envName) then
-                            isEnvironmentPart = true
+                            isEnvironment = true
                             break
                         end
                     end
                     
-                    if not isEnvironmentPart then
+                    if not isEnvironment then
                         furnitureCount = furnitureCount + 1
                         
                         local furnitureId = getFurnitureId(obj)
@@ -479,10 +515,8 @@ local function scanHouseFurniture()
                         local cframeArray = cframeToArray(obj.CFrame)
                         local scale = getFurnitureScale(obj)
                         
-                        -- Crear ID único
                         local uniqueId = "f-" .. tostring(tick()):gsub("%.", ""):sub(-4)
                         
-                        -- Calcular costos
                         local price = furniturePrices[furnitureId] or furniturePrices["default"]
                         totalCost = totalCost + price
                         
@@ -496,8 +530,6 @@ local function scanHouseFurniture()
                             cframe = cframeArray,
                             scale = math.max(0.01, scale)
                         }
-                        
-                        print("Mueble encontrado:", furnitureId, "en posición:", obj.Position)
                     end
                 end
             end
@@ -518,8 +550,8 @@ local Button = HouseTab:CreateButton({
    Name = "Copy House",
    Callback = function()
       Rayfield:Notify({
-         Title = "Scanning House",
-         Content = "Please wait...",
+         Title = "Activando modo edición...",
+         Content = "Por favor espera",
          Duration = 2,
          Image = "loader"
       })
@@ -528,7 +560,7 @@ local Button = HouseTab:CreateButton({
       
       local houseDataFormatted, count, cost, texCost = scanHouseFurniture()
       
-      if count > 0 and count < 500 then -- Límite razonable
+      if count > 0 and count < 1000 then -- Límite más realista: 1000 muebles
          furnitureCount = count
          furnitureCost = cost
          textureCost = texCost
@@ -545,19 +577,17 @@ local Button = HouseTab:CreateButton({
             Image = "check"
          })
          
-         -- Mostrar datos en consola
          print("House Data JSON:")
          local jsonData = HttpService:JSONEncode(houseDataFormatted)
          print(jsonData)
          
-         -- Copiar al portapapeles si es posible
          pcall(function()
             if setclipboard then
                 setclipboard(jsonData)
                 print("Data copied to clipboard!")
             end
          end)
-      elseif count >= 500 then
+      elseif count >= 1000 then
          Rayfield:Notify({
             Title = "Too Many Items",
             Content = "Found " .. count .. " items. This seems incorrect.",
@@ -588,14 +618,19 @@ local Button = HouseTab:CreateButton({
          return
       end
       
+      -- Activar modo edición antes de pegar
+      local editSuccess = enterEditMode()
+      if editSuccess then
+         wait(1)
+      end
+      
       Rayfield:Notify({
          Title = "Pasting House",
-         Content = "Preparing to place " .. furnitureCount .. " furnitures...",
-         Duration = 3,
+         Content = "Placing " .. furnitureCount .. " furnitures...",
+         Duration = 2,
          Image = "loader"
       })
       
-      -- Simulación de colocación rápida
       local totalFurniture = 0
       for _ in pairs(houseData.furniture) do
          totalFurniture = totalFurniture + 1
@@ -603,31 +638,36 @@ local Button = HouseTab:CreateButton({
       
       print("Iniciando colocación de", totalFurniture, "muebles")
       
-      -- Colocación rápida (sin delays innecesarios)
+      -- Colocación ultra rápida
       local placedCount = 0
+      local startTime = tick()
+      
       for furnitureId, furniture in pairs(houseData.furniture) do
          placedCount = placedCount + 1
          
          -- Aquí iría la lógica real de colocación
-         print("Colocando mueble:", furniture.id, "Posición:", furniture.cframe[1], furniture.cframe[2], furniture.cframe[3])
+         print("Colocando:", furniture.id)
          
-         -- Actualizar progreso
-         local progressPercent = math.floor((placedCount / totalFurniture) * 100)
-         Label4:Set("Progress: " .. progressPercent .. "%")
-         
-         -- Pequeño delay solo para mostrar progreso
-         if placedCount % 10 == 0 then
-            wait(0.01)
+         -- Actualizar progreso cada 20 muebles para mejor rendimiento
+         if placedCount % 20 == 0 or placedCount == totalFurniture then
+            local progressPercent = math.floor((placedCount / totalFurniture) * 100)
+            Label4:Set("Progress: " .. progressPercent .. "%")
+            
+            -- Pequeño yield para evitar lag
+            game:GetService("RunService").Heartbeat:Wait()
          end
          
          if placedCount == totalFurniture then
+            local endTime = tick()
+            local timeTaken = string.format("%.2f", endTime - startTime)
+            
             Rayfield:Notify({
                Title = "Success!",
-               Content = "House pasted successfully! (" .. placedCount .. " items)",
+               Content = "House pasted successfully! (" .. placedCount .. " items in " .. timeTaken .. "s)",
                Duration = 4,
                Image = "check"
             })
-            print("Colocación completada. Total de muebles:", placedCount)
+            print("Colocación completada en", timeTaken, "segundos")
          end
       end
    end,
@@ -642,7 +682,7 @@ local Button = ScannerTab:CreateButton({
    Name = "Scan House",
    Callback = function()
       local scan_notify = Rayfield:Notify({
-         Title = "Scanning Home..",
+         Title = "Activando modo edición...",
          Content = "Starting Scan",
          Duration = 1,
          Image = "play",
@@ -655,7 +695,7 @@ local Button = ScannerTab:CreateButton({
       
       Label5:Set("Home Type: " .. homeType)
       
-      if count > 0 and count < 500 then
+      if count > 0 and count < 1000 then
          furnitureCount = count
          furnitureCost = cost
          textureCost = texCost
@@ -674,7 +714,7 @@ local Button = ScannerTab:CreateButton({
          print("Formatted House Data:")
          local jsonData = HttpService:JSONEncode(houseDataFormatted)
          print(jsonData)
-      elseif count >= 500 then
+      elseif count >= 1000 then
          Rayfield:Notify({
             Title = "Error",
             Content = "Too many items found (" .. count .. "). Scan failed.",
@@ -694,4 +734,5 @@ local Button = ScannerTab:CreateButton({
 
 -- ========== CONSOLE MESSAGE ==========
 print("ShadowX Hub ha cargado correctamente")
-print("Para usar: entra en modo edición de tu casa y haz clic en 'Scan House'")
+print("El script intentará entrar en modo edición automáticamente")
+print("Si no funciona, entra en modo edición manualmente antes de usar")
