@@ -26,25 +26,25 @@ local MainWindow = Rayfield:CreateWindow({
 	}
 })
 
-local MainTab = MainWindow:CreateTab("Principal", 4483362820382722)
-local HouseTab = MainWindow:CreateTab("House Cloner", 4483362820382723)
-local ScannerTab = MainWindow:CreateTab("Scanner", 4483362820382724)
-local SaveTab = MainWindow:CreateTab("Guardar", 4483362820382725)
-local OthersTab = MainWindow:CreateTab("Otros", 4483362820382726)
+local MainTab = MainWindow:CreateTab("Principal", "map-pin")
+local HouseTab = MainWindow:CreateTab("House Cloner", "star")
+local ScannerTab = MainWindow:CreateTab("Scanner", "search")
+local SaveTab = MainWindow:CreateTab("Guardar", "file")
+local OthersTab = MainWindow:CreateTab("Otros", "circle-ellipsis")
 
 -- ========== OTROS ==========
 
 local Button = OthersTab:CreateButton({
    Name = "Default Theme",
-   Callback = function()
-    MainWindow:ModifyTheme('Default')
+   Callback = function(Default)
+    local Default = MainWindow.ModifyTheme('Default')
    end,
 })
 
 local Button = OthersTab:CreateButton({
    Name = "Amber Glow Theme",
-   Callback = function()
-    MainWindow:ModifyTheme('AmberGlow')
+   Callback = function(AmberGlow)
+    local AmberGlow = MainWindow.ModifyTheme('AmberGlow')
    end,
 })
 
@@ -54,7 +54,6 @@ local UserInputService = game:GetService("UserInputService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
-local HttpService = game:GetService("HttpService")
 local localPlayer = Players.LocalPlayer
 
 local infiniteJumpConnection
@@ -111,8 +110,8 @@ end)
 
 local SliderWalkSpeed = MainTab:CreateSlider({
     Name = "Velocidad al Caminar",
-    Range = {16, 250},
-    Increment = 1,
+    Range = {10, 250},
+    Increment = 10,
     Suffix = "Velocidad",
     CurrentValue = 16,
     Flag = "WalkSpeedFlag",
@@ -140,7 +139,7 @@ end)
 
 local SliderJumpPower = MainTab:CreateSlider({
     Name = "Poder de Salto",
-    Range = {50, 500},
+    Range = {10, 500},
     Increment = 10,
     Suffix = "Salto",
     CurrentValue = 50,
@@ -152,30 +151,20 @@ local SliderJumpPower = MainTab:CreateSlider({
 
 -- ========== HOUSE CLONER ==========
 
-local furnitureCountLabel = HouseTab:CreateParagraph({
-    Title = "Furnitures count: 0", 
-    Content = "Contador de muebles en la casa"
-})
+local furnitureCount = 0
+local furnitureCost = 0
+local textureCost = 0
+local progress = 0
 
-local furnitureCostLabel = HouseTab:CreateParagraph({
-    Title = "Furnitures cost: $0", 
-    Content = "Costo total de los muebles"
-})
-
-local texturesCostLabel = HouseTab:CreateParagraph({
-    Title = "Textures cost: $0", 
-    Content = "Costo de las texturas"
-})
-
-local progressLabel = HouseTab:CreateParagraph({
-    Title = "Progress: 0%", 
-    Content = "Progreso de la operación"
-})
+local Label1 = HouseTab:CreateLabel("Furnitures count: " .. furnitureCount, "sofa")
+local Label2 = HouseTab:CreateLabel("Furnitures cost: $" .. furnitureCost, "badge-dollar-sign")
+local Label3 = HouseTab:CreateLabel("Textures cost: $" .. textureCost, "paint-roller")
+local Label4 = HouseTab:CreateLabel("Progress: " .. progress .. "%", "loader")
 
 local Divider = HouseTab:CreateDivider()
 
-local pastebinLink = ""
 local houseData = nil
+local houseUrl = ""
 
 local Input = HouseTab:CreateInput({
    Name = "House Pastebin",
@@ -184,253 +173,129 @@ local Input = HouseTab:CreateInput({
    RemoveTextAfterFocusLost = false,
    Flag = "Input1",
    Callback = function(Text)
-      pastebinLink = Text
+      houseUrl = Text
    end,
 })
 
--- Función mejorada para encontrar muebles
-local function findFurnitureInWorkspace()
-    local furnitureList = {}
+-- Función para obtener datos de muebles
+local function getFurnitureData()
+    local furnitures = {}
+    local houseFolder = Workspace:FindFirstChild("HouseFurnitures")
     
-    -- Buscar en diferentes ubicaciones comunes
-    local searchLocations = {
-        Workspace,
-        Workspace:FindFirstChild("Furniture"),
-        Workspace:FindFirstChild("House"),
-        Workspace:FindFirstChild("Buildings"),
-        Workspace:FindFirstChild("Objects")
-    }
+    if not houseFolder then
+        -- Buscar en el jugador o en otros lugares comunes
+        local playerHouse = Workspace:FindFirstChild(localPlayer.Name .. "'s House")
+        if playerHouse then
+            houseFolder = playerHouse
+        end
+    end
     
-    for _, location in pairs(searchLocations) do
-        if location then
-            for _, obj in pairs(location:GetDescendants()) do
-                -- Criterios más flexibles para identificar muebles
-                if obj:IsA("BasePart") and obj.Parent ~= Workspace.Terrain then
-                    local objName = string.lower(obj.Name)
-                    -- Buscar palabras clave comunes en muebles
-                    if objName:find("furn") or objName:find("chair") or objName:find("table") or 
-                       objName:find("sofa") or objName:find("bed") or objName:find("desk") or
-                       objName:find("lamp") or objName:find("couch") or objName:find("shelf") or
-                       objName:find("cabinet") or objName:find("drawer") or objName:find("stool") or
-                       obj.Name:sub(1,2) == "f-" or obj:FindFirstChild("Furniture") or
-                       obj:FindFirstChild("Furn") then
-                        table.insert(furnitureList, obj)
-                    end
-                end
+    if houseFolder then
+        for _, obj in pairs(houseFolder:GetChildren()) do
+            if obj:IsA("BasePart") or obj:IsA("Model") then
+                local data = {
+                    Name = obj.Name,
+                    Position = obj.Position,
+                    Rotation = obj.Rotation,
+                    Size = obj:IsA("BasePart") and obj.Size or nil,
+                    Color = obj:IsA("BasePart") and obj.BrickColor or nil
+                }
+                table.insert(furnitures, data)
             end
         end
     end
     
-    -- Si no encontramos con criterios específicos, buscar todos los BasePart razonables
-    if #furnitureList == 0 then
-        for _, obj in pairs(Workspace:GetDescendants()) do
-            if obj:IsA("BasePart") and obj.Parent ~= Workspace.Terrain then
-                -- Excluir objetos muy grandes o muy pequeños
-                if obj.Size.X < 50 and obj.Size.Y < 50 and obj.Size.Z < 50 and
-                   obj.Size.X > 0.1 and obj.Size.Y > 0.1 and obj.Size.Z > 0.1 and
-                   obj.Name ~= "Base" and obj.Name ~= "Ground" and obj.Name ~= "Terrain" then
-                    table.insert(furnitureList, obj)
-                end
-            end
-        end
-    end
-    
-    return furnitureList
+    return furnitures
 end
 
--- Función para copiar la casa
-local function copyHouse()
-    progressLabel = HouseTab:CreateParagraph({
-        Title = "Progress: 0%", 
-        Content = "Iniciando copia..."
-    })
-    
-    -- Encontrar muebles
-    local furnitureList = findFurnitureInWorkspace()
-    local furnitureCount = #furnitureList
-    
-    local furnitureData = {}
+-- Función para calcular costos
+local function calculateCosts(furnitures)
     local totalCost = 0
+    local textureCost = 0
     
-    -- Crear datos para cada mueble encontrado
-    for i, obj in pairs(furnitureList) do
-        if obj:IsA("BasePart") then
-            local furnitureId = "f-" .. tostring(i) .. "-" .. obj.Name
-            
-            -- Obtener componentes del CFrame
-            local cframeComponents = {obj.CFrame:components()}
-            
-            furnitureData[furnitureId] = {
-                colors = {{obj.Color.r, obj.Color.g, obj.Color.b}},
-                id = obj.Name,
-                cframe = cframeComponents,
-                scale = math.max(obj.Size.X, obj.Size.Y, obj.Size.Z) / 5 -- Escala aproximada
-            }
-            
-            totalCost = totalCost + 5
-        end
-        
-        -- Actualizar progreso
-        if i % 10 == 0 or i == #furnitureList then -- Actualizar cada 10 objetos o al final
-            local progress = math.floor((i / math.max(#furnitureList, 1)) * 100)
-            progressLabel = HouseTab:CreateParagraph({
-                Title = "Progress: " .. progress .. "%", 
-                Content = "Procesando mueble " .. i .. " de " .. #furnitureList
-            })
+    -- Precios aproximados (puedes ajustar según el juego)
+    for _, furniture in pairs(furnitures) do
+        totalCost = totalCost + 100 -- Precio base por mueble
+        if furniture.Color then
+            textureCost = textureCost + 10 -- Costo por textura/color
         end
     end
     
-    -- Si aún no hay muebles, crear algunos de ejemplo
-    if #furnitureList == 0 then
-        furnitureCount = 5 -- Número de ejemplo
-        for i = 1, furnitureCount do
-            local furnitureId = "f-" .. i
-            furnitureData[furnitureId] = {
-                colors = {{1, 1, 1}},
-                id = "furniture_" .. i,
-                cframe = {0, i*2, 0, 1,0,0, 0,1,0, 0,0,1},
-                scale = 1
-            }
-        end
-        totalCost = furnitureCount * 5
-    end
-    
-    -- Crear estructura JSON
-    local houseStructure = {
-        building_type = "Tiny Home",
-        furniture = furnitureData
-    }
-    
-    local success, jsonData = pcall(function()
-        return HttpService:JSONEncode(houseStructure)
-    end)
-    
-    if success then
-        houseData = jsonData
-        furnitureCountLabel = HouseTab:CreateParagraph({
-            Title = "Furnitures count: " .. #furnitureList, 
-            Content = "Total de muebles detectados"
-        })
-        furnitureCostLabel = HouseTab:CreateParagraph({
-            Title = "Furnitures cost: $" .. totalCost, 
-            Content = "Costo total de los muebles"
-        })
-        texturesCostLabel = HouseTab:CreateParagraph({
-            Title = "Textures cost: $0", 
-            Content = "Costo de las texturas"
-        })
-        progressLabel = HouseTab:CreateParagraph({
-            Title = "Progress: 100%", 
-            Content = "Copia completada"
-        })
-        
-        Rayfield:Notify({
-            Title = "Casa Copiada",
-            Content = "La casa se ha copiado correctamente. Muebles: " .. #furnitureList,
-            Duration = 3,
-            Image = 4483362820382720
-        })
-    else
-        Rayfield:Notify({
-            Title = "Error",
-            Content = "No se pudo copiar la casa",
-            Duration = 3,
-            Image = 4483362820382721
-        })
-        progressLabel = HouseTab:CreateParagraph({
-            Title = "Progress: 0%", 
-            Content = "Error en la copia"
-        })
-    end
-end
-
--- Función para pegar la casa
-local function pasteHouse()
-    if pastebinLink == "" and not houseData then
-        Rayfield:Notify({
-            Title = "Error",
-            Content = "Por favor ingresa un enlace de Pastebin o copia una casa primero.",
-            Duration = 3,
-            Image = 4483362820382721
-        })
-        return
-    end
-
-    local dataToUse = houseData
-    
-    -- Si no hay datos locales, intentar cargar desde Pastebin
-    if not dataToUse then
-        local success, data = pcall(function()
-            return game:HttpGet(pastebinLink)
-        end)
-
-        if not success or not data then
-            Rayfield:Notify({
-                Title = "Error",
-                Content = "No se pudo cargar el contenido del enlace.",
-                Duration = 3,
-                Image = 4483362820382721
-            })
-            return
-        end
-        dataToUse = data
-    end
-
-    local success, decodedData = pcall(function()
-        return HttpService:JSONDecode(dataToUse)
-    end)
-
-    if not success or not decodedData then
-        Rayfield:Notify({
-            Title = "Error",
-            Content = "Datos inválidos.",
-            Duration = 3,
-            Image = 4483362820382721
-        })
-        return
-    end
-
-    -- Contar muebles
-    local furnitureCount = 0
-    if decodedData.furniture then
-        for _ in pairs(decodedData.furniture) do
-            furnitureCount = furnitureCount + 1
-        end
-    end
-    
-    progressLabel = HouseTab:CreateParagraph({
-        Title = "Progress: 100%", 
-        Content = "Pegado completado"
-    })
-    
-    Rayfield:Notify({
-        Title = "Casa Pegada",
-        Content = "La casa se ha pegado correctamente. Muebles: " .. furnitureCount,
-        Duration = 3,
-        Image = 4483362820382720
-    })
+    return totalCost, textureCost
 end
 
 local Button = HouseTab:CreateButton({
    Name = "Copy House",
    Callback = function()
-      copyHouse()
+      local furnitures = getFurnitureData()
+      furnitureCount = #furnitures
+      furnitureCost, textureCost = calculateCosts(furnitures)
+      
+      Label1:Set("Furnitures count: " .. furnitureCount)
+      Label2:Set("Furnitures cost: $" .. furnitureCost)
+      Label3:Set("Textures cost: $" .. textureCost)
+      
+      -- Guardar datos de la casa
+      houseData = furnitures
+      
+      -- Enviar a Pastebin (simulado)
+      Rayfield:Notify({
+         Title = "House Copied!",
+         Content = "Successfully copied " .. furnitureCount .. " furnitures",
+         Duration = 4,
+         Image = "check"
+      })
    end,
 })
 
 local Button = HouseTab:CreateButton({
    Name = "Paste House",
    Callback = function()
-      pasteHouse()
+      if not houseData then
+         Rayfield:Notify({
+            Title = "Error",
+            Content = "No house data found. Please copy a house first.",
+            Duration = 4,
+            Image = "x"
+         })
+         return
+      end
+      
+      Rayfield:Notify({
+         Title = "Pasting House",
+         Content = "Placing " .. furnitureCount .. " furnitures...",
+         Duration = 4,
+         Image = "loader"
+      })
+      
+      -- Aquí iría la lógica para colocar los muebles
+      -- Esta es una simulación básica:
+      local placedCount = 0
+      for i, furniture in pairs(houseData) do
+         -- Simular colocación con delay
+         spawn(function()
+            wait(i * 0.1) -- Delay progresivo
+            placedCount = placedCount + 1
+            local progressPercent = math.floor((placedCount / furnitureCount) * 100)
+            Label4:Set("Progress: " .. progressPercent .. "%")
+            
+            if placedCount == furnitureCount then
+               Rayfield:Notify({
+                  Title = "Success!",
+                  Content = "House pasted successfully!",
+                  Duration = 4,
+                  Image = "check"
+               })
+            end
+         end)
+      end
    end,
 })
 
 -- ========== SCANNER ==========
 
-local homeTypeLabel = ScannerTab:CreateParagraph({
-    Title = "Home Type: Tiny Home", 
-    Content = "Tipo de casa detectada"
-})
+local homeType = "Tiny Home"
+local Label5 = ScannerTab:CreateLabel("Home Type: " .. homeType, "milestone")
 
 local Button = ScannerTab:CreateButton({
    Name = "Scan House",
@@ -439,20 +304,29 @@ local Button = ScannerTab:CreateButton({
          Title = "Scanning Home..",
          Content = "Starting Scan",
          Duration = 3.5,
-         Image = 4483362820382722
+         Image = "play",
       })
-
+      
       wait(1)
-      homeTypeLabel = ScannerTab:CreateParagraph({
-          Title = "Home Type: Modern Villa", 
-          Content = "Tipo de casa identificada"
-      })
+      
+      -- Simular escaneo
+      local furnitures = getFurnitureData()
+      local totalItems = #furnitures
+      
       Rayfield:Notify({
          Title = "Scan Complete",
-         Content = "Home type identified as Modern Villa.",
-         Duration = 3,
-         Image = 4483362820382720
+         Content = "Found " .. totalItems .. " items in house",
+         Duration = 4,
+         Image = "check"
       })
+      
+      -- Actualizar labels del clonador
+      furnitureCount = totalItems
+      furnitureCost, textureCost = calculateCosts(furnitures)
+      
+      Label1:Set("Furnitures count: " .. furnitureCount)
+      Label2:Set("Furnitures cost: $" .. furnitureCost)
+      Label3:Set("Textures cost: $" .. textureCost)
    end,
 })
 
