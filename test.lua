@@ -167,7 +167,7 @@ local Divider = HouseTab:CreateDivider()
 local houseData = nil
 local houseUrl = ""
 
--- Base de datos de precios de muebles (valores aproximados)
+-- Base de datos de precios de muebles
 local furniturePrices = {
     ["brick"] = 50,
     ["medium_disk"] = 75,
@@ -205,21 +205,23 @@ local function cframeToArray(cf)
     local pos = cf.Position
     local x, y, z = pos.X, pos.Y, pos.Z
     
-    -- Extraer componentes de la matriz de transformación
-    local _, _, _, m03, m10, m11, m12, m13, m20, m21, m22, m23 = cf:components()
-    local m00, m01, m02 = cf.XVector.X, cf.XVector.Y, cf.XVector.Z
-    local m10, m11, m12 = cf.YVector.X, cf.YVector.Y, cf.YVector.Z  
-    local m20, m21, m22 = cf.ZVector.X, cf.ZVector.Y, cf.ZVector.Z
+    -- Extraer la matriz 3x3 de rotación y el vector de traslación
+    local rightVector = cf.XVector
+    local upVector = cf.YVector
+    local backVector = cf.ZVector
     
-    return {x, y, z, m00, m01, m02, m03, m10, m11, m12, m13, m20, m21, m22, m23}
+    return {
+        x, y, z,
+        rightVector.X, rightVector.Y, rightVector.Z,
+        upVector.X, upVector.Y, upVector.Z,
+        backVector.X, backVector.Y, backVector.Z
+    }
 end
 
 -- Función para obtener el tipo de casa
 local function getBuildingType()
-    -- Buscar la casa del jugador
     local playerHouse = Workspace:FindFirstChild(localPlayer.Name .. "'s House")
     if playerHouse then
-        -- Determinar tipo basado en el nombre o estructura
         local houseName = playerHouse.Name:lower()
         if houseName:find("mansion") then
             return "Mansion"
@@ -229,38 +231,60 @@ local function getBuildingType()
             return "Tiny Home"
         end
     end
-    
-    -- Buscar estructura de casa en el workspace
-    for _, child in pairs(Workspace:GetChildren()) do
-        if child.Name == "HouseFurnitures" or child.Name:find("House") then
-            local size = child:GetExtents(true).Size
-            if size and size.Magnitude > 100 then
-                return "Mansion"
-            elseif size and size.Magnitude > 50 then
-                return "Large Home"
-            else
-                return "Tiny Home"
-            end
-        end
-    end
-    
     return "Tiny Home"
 end
 
--- Función para identificar si un objeto es un mueble válido
+-- Función para identificar si un objeto es un mueble válido de Adopt Me
 local function isValidFurniture(obj)
     if not obj then return false end
     if not (obj:IsA("BasePart") or obj:IsA("Model")) then return false end
-    if obj.Name == "HumanoidRootPart" or obj.Name == "Torso" or obj.Name == "Head" then return false end
-    if obj:IsA("Seat") then return false end
     
-    -- Para BasePart, verificar que esté anclado (muebles típicamente anclados)
+    -- Excluir partes del cuerpo del jugador
+    if obj.Name == "HumanoidRootPart" or obj.Name == "Torso" or obj.Name == "Head" or 
+       obj.Name == "Left Arm" or obj.Name == "Right Arm" or obj.Name == "Left Leg" or 
+       obj.Name == "Right Leg" then 
+        return false 
+    end
+    
+    -- Excluir asientos y partes del entorno
+    if obj:IsA("Seat") or obj:IsA("VehicleSeat") then return false end
+    
+    -- Para BasePart, verificar características de muebles
     if obj:IsA("BasePart") then
+        -- Los muebles en Adopt Me normalmente están anclados
         if obj.Anchored == false then return false end
-        -- Excluir partes del entorno como suelo, paredes, etc.
-        if obj.Name:lower():find("ground") or obj.Name:lower():find("floor") or 
-           obj.Name:lower():find("wall") or obj.Name:lower():find("roof") then
+        
+        -- Excluir partes estructurales del mapa
+        local excludedNames = {
+            "ground", "floor", "wall", "roof", "ceiling", "baseplate",
+            "terrain", "map", "world", "boundary"
+        }
+        
+        local objName = obj.Name:lower()
+        for _, excluded in pairs(excludedNames) do
+            if objName:find(excluded) then
+                return false
+            end
+        end
+        
+        -- Excluir partes demasiado grandes (probablemente estructurales)
+        if obj.Size.X > 50 or obj.Size.Y > 50 or obj.Size.Z > 50 then
             return false
+        end
+        
+        -- Excluir partes demasiado pequeñas (menos de 0.1 en alguna dimensión)
+        if obj.Size.X < 0.1 and obj.Size.Y < 0.1 and obj.Size.Z < 0.1 then
+            return false
+        end
+    end
+    
+    -- Verificar si está en una ubicación típica de muebles
+    local parent = obj.Parent
+    if parent then
+        local parentName = parent.Name:lower()
+        -- Aceptar si está en ubicaciones típicas de muebles
+        if parentName:find("furniture") or parentName:find("house") or parentName:find("room") then
+            return true
         end
     end
     
@@ -271,33 +295,61 @@ end
 local function getFurnitureId(obj)
     if not obj then return "unknown" end
     
-    local name = obj.Name:lower()
+    local originalName = obj.Name
+    local name = originalName:lower()
     
-    -- Limpiar nombre de prefijos/sufijos comunes
-    name = name:gsub("furniture_", ""):gsub("_furniture", "")
-    name = name:gsub("item_", ""):gsub("_item", "")
-    name = name:gsub("%d+", "") -- Remover números
+    -- Limpiar nombre de prefijos/sufijos numéricos
+    name = name:gsub("_%d+", ""):gsub("%d+$", "")
+    name = name:gsub("^%d+", "")
     
-    -- Normalizar nombres comunes
-    if name:find("sofa") or name:find("couch") then return "sofa" end
-    if name:find("table") then return "table" end
-    if name:find("chair") then return "chair" end
-    if name:find("bed") then return "bed" end
-    if name:find("lamp") then return "lamp" end
-    if name:find("plant") then return "plant" end
-    if name:find("picture") or name:find("painting") then return "picture" end
-    if name:find("rug") or name:find("carpet") then return "rug" end
-    if name:find("tv") or name:find("television") then return "tv" end
-    if name:find("brick") then return "brick" end
-    if name:find("disk") then return "medium_disk" end
-    if name:find("mound") then return "plainmound_v1" end
-    if name:find("trash") then return "fancytrashcan" end
-    if name:find("torus") then return "torus_v3_plain" end
-    if name:find("beam") then return "beam_v1_plain" end
+    -- Mapeo de nombres comunes a IDs de Adopt Me
+    local nameMapping = {
+        ["brick"] = "brick",
+        ["disk"] = "medium_disk",
+        ["mound"] = "plainmound_v1",
+        ["trashcan"] = "fancytrashcan",
+        ["torus"] = "torus_v3_plain",
+        ["beam"] = "beam_v1_plain",
+        ["sofa"] = "sofa",
+        ["couch"] = "sofa",
+        ["table"] = "table",
+        ["chair"] = "chair",
+        ["bed"] = "bed",
+        ["lamp"] = "lamp",
+        ["light"] = "lamp",
+        ["plant"] = "plant",
+        ["flower"] = "plant",
+        ["tree"] = "plant",
+        ["picture"] = "picture",
+        ["painting"] = "picture",
+        ["photo"] = "picture",
+        ["rug"] = "rug",
+        ["carpet"] = "rug",
+        ["tv"] = "tv",
+        ["television"] = "tv",
+        ["screen"] = "tv",
+        ["kitchen"] = "kitchen",
+        ["stove"] = "kitchen",
+        ["fridge"] = "kitchen",
+        ["bathroom"] = "bathroom",
+        ["toilet"] = "bathroom",
+        ["sink"] = "bathroom"
+    }
     
-    -- Si no se reconoce, usar el nombre limpio
-    if name == "" then name = "unknown" end
-    return name
+    -- Buscar coincidencias en el mapeo
+    for key, value in pairs(nameMapping) do
+        if name:find(key) then
+            return value
+        end
+    end
+    
+    -- Si no se encuentra, usar el nombre original limpio
+    local cleanName = originalName:gsub("_%d+", ""):gsub("%d+$", "")
+    if cleanName == "" then
+        cleanName = "unknown"
+    end
+    
+    return cleanName:lower()
 end
 
 -- Función para obtener colores del mueble
@@ -305,14 +357,15 @@ local function getFurnitureColors(obj)
     local colors = {}
     
     if obj:IsA("BasePart") then
-        -- Obtener color principal
         local colorValue = nil
+        
+        -- Intentar obtener color de diferentes fuentes
         if obj:FindFirstChild("Color") then
             colorValue = obj.Color
         elseif obj:FindFirstChild("BrickColor") then
             colorValue = obj.BrickColor.Color
         else
-            colorValue = obj.Color or obj.BrickColor and obj.BrickColor.Color
+            colorValue = obj.Color
         end
         
         if colorValue then
@@ -322,19 +375,16 @@ local function getFurnitureColors(obj)
             table.insert(colors, {1, 1, 1})
         end
     elseif obj:IsA("Model") then
-        -- Para modelos, obtener colores de las partes principales
-        for _, part in pairs(obj:GetDescendants()) do
-            if part:IsA("BasePart") then
-                local colorValue = part.Color or (part.BrickColor and part.BrickColor.Color)
-                if colorValue then
-                    table.insert(colors, {colorValue.R, colorValue.G, colorValue.B})
-                    break -- Solo el color principal
-                end
+        -- Para modelos, obtener el color de la parte principal
+        local mainPart = obj:FindFirstChildWhichIsA("BasePart")
+        if mainPart then
+            local colorValue = mainPart.Color or (mainPart.BrickColor and mainPart.BrickColor.Color)
+            if colorValue then
+                table.insert(colors, {colorValue.R, colorValue.G, colorValue.B})
+            else
+                table.insert(colors, {1, 1, 1})
             end
-        end
-        
-        -- Si no se encontró color, usar blanco
-        if #colors == 0 then
+        else
             table.insert(colors, {1, 1, 1})
         end
     end
@@ -345,30 +395,48 @@ end
 -- Función para calcular escala
 local function getFurnitureScale(obj)
     if obj:IsA("BasePart") then
+        -- Calcular escala basada en el tamaño promedio
         local avgSize = (obj.Size.X + obj.Size.Y + obj.Size.Z) / 3
-        return math.max(0.01, avgSize / 10) -- Normalizar a rango razonable
+        return math.max(0.01, avgSize / 4) -- Ajuste para escala razonable
     elseif obj:IsA("Model") then
         local size = obj:GetExtents(true).Size
         local avgSize = (size.X + size.Y + size.Z) / 3
-        return math.max(0.01, avgSize / 10)
+        return math.max(0.01, avgSize / 4)
     end
     return 1
 end
 
--- Función principal para escanear muebles y convertir al formato específico
+-- Función principal para escanear muebles
 local function scanHouseFurniture()
     local furnitureData = {}
     local buildingType = getBuildingType()
     
-    -- Buscar muebles en ubicaciones específicas de Adopt Me
-    local searchLocations = {
-        Workspace:FindFirstChild(localPlayer.Name .. "'s House"),
-        Workspace:FindFirstChild("HouseFurnitures"),
-        Workspace:FindFirstChild("Furniture"),
-        Workspace:FindFirstChild("PlayerHouses"),
+    -- Buscar en ubicaciones típicas de muebles en Adopt Me
+    local searchLocations = {}
+    
+    -- Ubicación principal: casa del jugador
+    local playerHouse = Workspace:FindFirstChild(localPlayer.Name .. "'s House")
+    if playerHouse then
+        table.insert(searchLocations, playerHouse)
+    end
+    
+    -- Otras ubicaciones comunes
+    local commonLocations = {
+        "HouseFurnitures",
+        "Furniture",
+        "PlayerHouses",
+        "Buildings",
+        "Interior"
     }
     
-    -- Añadir también búsqueda directa en el workspace
+    for _, locationName in pairs(commonLocations) do
+        local location = Workspace:FindFirstChild(locationName)
+        if location then
+            table.insert(searchLocations, location)
+        end
+    end
+    
+    -- Añadir el workspace completo como último recurso
     table.insert(searchLocations, Workspace)
     
     local furnitureCount = 0
@@ -376,47 +444,34 @@ local function scanHouseFurniture()
     local textureCostTotal = 0
     local scannedObjects = {} -- Para evitar duplicados
     
+    print("Iniciando escaneo de muebles...")
+    
     for _, location in pairs(searchLocations) do
         if location then
-            -- Buscar muebles directamente en esta ubicación
+            print("Buscando en:", location.Name)
+            
+            -- Buscar solo en hijos directos para evitar duplicados
             for _, obj in pairs(location:GetChildren()) do
                 if isValidFurniture(obj) and not scannedObjects[obj] then
                     scannedObjects[obj] = true
                     
-                    furnitureCount = furnitureCount + 1
+                    -- Verificar que no sea parte del entorno del juego
+                    local isEnvironmentPart = false
+                    local objName = obj.Name:lower()
                     
-                    local furnitureId = getFurnitureId(obj)
-                    local colors = getFurnitureColors(obj)
-                    local cframeArray = cframeToArray(obj.CFrame)
-                    local scale = getFurnitureScale(obj)
+                    local environmentNames = {
+                        "baseplate", "ground", "floor", "wall", "roof", "sky", 
+                        "terrain", "water", "lava", "boundary"
+                    }
                     
-                    -- Crear ID único para cada mueble
-                    local uniqueId = "f-" .. math.random(100, 9999)
-                    
-                    -- Calcular costos
-                    local price = furniturePrices[furnitureId] or furniturePrices["default"]
-                    totalCost = totalCost + price
-                    
-                    if colors and #colors > 0 then
-                        textureCostTotal = textureCostTotal + (#colors * 10)
+                    for _, envName in pairs(environmentNames) do
+                        if objName:find(envName) then
+                            isEnvironmentPart = true
+                            break
+                        end
                     end
                     
-                    furnitureData[uniqueId] = {
-                        colors = colors,
-                        id = furnitureId,
-                        cframe = cframeArray,
-                        scale = scale
-                    }
-                end
-            end
-            
-            -- Buscar también en descendientes (para modelos complejos)
-            for _, obj in pairs(location:GetDescendants()) do
-                if isValidFurniture(obj) and not scannedObjects[obj] and obj.Parent ~= location then
-                    -- Solo incluir si es un mueble independiente (no parte de otro modelo)
-                    if obj.Parent and (obj.Parent:IsA("Folder") or obj.Parent:IsA("Model") and obj.Parent.Name:find("Furniture")) then
-                        scannedObjects[obj] = true
-                        
+                    if not isEnvironmentPart then
                         furnitureCount = furnitureCount + 1
                         
                         local furnitureId = getFurnitureId(obj)
@@ -424,8 +479,10 @@ local function scanHouseFurniture()
                         local cframeArray = cframeToArray(obj.CFrame)
                         local scale = getFurnitureScale(obj)
                         
-                        local uniqueId = "f-" .. math.random(100, 9999)
+                        -- Crear ID único
+                        local uniqueId = "f-" .. tostring(tick()):gsub("%.", ""):sub(-4)
                         
+                        -- Calcular costos
                         local price = furniturePrices[furnitureId] or furniturePrices["default"]
                         totalCost = totalCost + price
                         
@@ -437,13 +494,17 @@ local function scanHouseFurniture()
                             colors = colors,
                             id = furnitureId,
                             cframe = cframeArray,
-                            scale = scale
+                            scale = math.max(0.01, scale)
                         }
+                        
+                        print("Mueble encontrado:", furnitureId, "en posición:", obj.Position)
                     end
                 end
             end
         end
     end
+    
+    print("Escaneo completado. Muebles encontrados:", furnitureCount)
     
     local houseDataFormatted = {
         building_type = buildingType,
@@ -451,23 +512,6 @@ local function scanHouseFurniture()
     }
     
     return houseDataFormatted, furnitureCount, totalCost, textureCostTotal
-end
-
--- Función para calcular costos totales
-local function calculateTotalCost(furnitureData)
-    local furnitureCost = 0
-    local textureCost = 0
-    
-    for _, furniture in pairs(furnitureData.furniture) do
-        local price = furniturePrices[furniture.id] or furniturePrices["default"]
-        furnitureCost = furnitureCost + price
-        
-        if furniture.colors and #furniture.colors > 0 then
-            textureCost = textureCost + (#furniture.colors * 10)
-        end
-    end
-    
-    return furnitureCost, textureCost
 end
 
 local Button = HouseTab:CreateButton({
@@ -480,11 +524,11 @@ local Button = HouseTab:CreateButton({
          Image = "loader"
       })
       
-      wait(1)
+      wait(0.5)
       
       local houseDataFormatted, count, cost, texCost = scanHouseFurniture()
       
-      if count > 0 then
+      if count > 0 and count < 500 then -- Límite razonable
          furnitureCount = count
          furnitureCost = cost
          textureCost = texCost
@@ -501,18 +545,25 @@ local Button = HouseTab:CreateButton({
             Image = "check"
          })
          
-         -- Mostrar datos en consola para debug
+         -- Mostrar datos en consola
          print("House Data JSON:")
          local jsonData = HttpService:JSONEncode(houseDataFormatted)
          print(jsonData)
          
-         -- Guardar en clipboard si es posible
+         -- Copiar al portapapeles si es posible
          pcall(function()
             if setclipboard then
                 setclipboard(jsonData)
                 print("Data copied to clipboard!")
             end
          end)
+      elseif count >= 500 then
+         Rayfield:Notify({
+            Title = "Too Many Items",
+            Content = "Found " .. count .. " items. This seems incorrect.",
+            Duration = 4,
+            Image = "x"
+         })
       else
          Rayfield:Notify({
             Title = "No Furnitures Found",
@@ -540,32 +591,107 @@ local Button = HouseTab:CreateButton({
       Rayfield:Notify({
          Title = "Pasting House",
          Content = "Preparing to place " .. furnitureCount .. " furnitures...",
-         Duration = 4,
+         Duration = 3,
          Image = "loader"
       })
       
-      -- Simular colocación de muebles (en un ejecutor real, aquí iría la lógica de colocación)
-      local placedCount = 0
+      -- Simulación de colocación rápida
       local totalFurniture = 0
       for _ in pairs(houseData.furniture) do
          totalFurniture = totalFurniture + 1
       end
       
+      print("Iniciando colocación de", totalFurniture, "muebles")
+      
+      -- Colocación rápida (sin delays innecesarios)
+      local placedCount = 0
       for furnitureId, furniture in pairs(houseData.furniture) do
-         spawn(function()
-            wait(placedCount * 0.1) -- Delay para simulación
-            placedCount = placedCount + 1
-            local progressPercent = math.floor((placedCount / totalFurniture) * 100)
-            Label4:Set("Progress: " .. progressPercent .. "%")
-            
-            -- Aquí se colocaría el mueble usando:
-            -- furniture.id (nombre del mueble)
-            -- furniture.cframe (posición y rotación en formato array)
-            -- furniture.colors (colores)
-            -- furniture.scale (escala)
-            
-            print("Placing furniture:", furniture.id)
-            print("Position:", furniture.cframe[1], furniture.cframe[2], furniture.cframe[3])
-            print("Scale:", furniture.scale)
-            
-            if placedCount == totalFurniture then*
+         placedCount = placedCount + 1
+         
+         -- Aquí iría la lógica real de colocación
+         print("Colocando mueble:", furniture.id, "Posición:", furniture.cframe[1], furniture.cframe[2], furniture.cframe[3])
+         
+         -- Actualizar progreso
+         local progressPercent = math.floor((placedCount / totalFurniture) * 100)
+         Label4:Set("Progress: " .. progressPercent .. "%")
+         
+         -- Pequeño delay solo para mostrar progreso
+         if placedCount % 10 == 0 then
+            wait(0.01)
+         end
+         
+         if placedCount == totalFurniture then
+            Rayfield:Notify({
+               Title = "Success!",
+               Content = "House pasted successfully! (" .. placedCount .. " items)",
+               Duration = 4,
+               Image = "check"
+            })
+            print("Colocación completada. Total de muebles:", placedCount)
+         end
+      end
+   end,
+})
+
+-- ========== SCANNER ==========
+
+local homeType = "Unknown"
+local Label5 = ScannerTab:CreateLabel("Home Type: " .. homeType, "milestone")
+
+local Button = ScannerTab:CreateButton({
+   Name = "Scan House",
+   Callback = function()
+      local scan_notify = Rayfield:Notify({
+         Title = "Scanning Home..",
+         Content = "Starting Scan",
+         Duration = 1,
+         Image = "play",
+      })
+      
+      wait(0.5)
+      
+      local houseDataFormatted, count, cost, texCost = scanHouseFurniture()
+      homeType = houseDataFormatted.building_type
+      
+      Label5:Set("Home Type: " .. homeType)
+      
+      if count > 0 and count < 500 then
+         furnitureCount = count
+         furnitureCost = cost
+         textureCost = texCost
+         
+         Label1:Set("Furnitures count: " .. furnitureCount)
+         Label2:Set("Furnitures cost: $" .. furnitureCost)
+         Label3:Set("Textures cost: $" .. textureCost)
+         
+         Rayfield:Notify({
+            Title = "Scan Complete",
+            Content = "Found " .. count .. " items in house (" .. homeType .. ")",
+            Duration = 3,
+            Image = "check"
+         })
+         
+         print("Formatted House Data:")
+         local jsonData = HttpService:JSONEncode(houseDataFormatted)
+         print(jsonData)
+      elseif count >= 500 then
+         Rayfield:Notify({
+            Title = "Error",
+            Content = "Too many items found (" .. count .. "). Scan failed.",
+            Duration = 4,
+            Image = "x"
+         })
+      else
+         Rayfield:Notify({
+            Title = "No Items Found",
+            Content = "Could not find any items in the house",
+            Duration = 4,
+            Image = "x"
+         })
+      end
+   end,
+})
+
+-- ========== CONSOLE MESSAGE ==========
+print("ShadowX Hub ha cargado correctamente")
+print("Para usar: entra en modo edición de tu casa y haz clic en 'Scan House'")
