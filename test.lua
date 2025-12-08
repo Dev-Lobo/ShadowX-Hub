@@ -1,29 +1,21 @@
+-- ShadowX Hub para Adopt Me - Versión corregida
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local MainWindow = Rayfield:CreateWindow({
-	Name = "ShadowX Hub",
-	LoadingTitle = "Cargando...",
-	LoadingSubtitle = "by Lobo27",
-	ConfigurationSaving = {
-	   Enabled = true,
-	   FolderName = nil,
-	   FileName = "ShadowX Hub"
-	},
-	Discord = {
-	   Enabled = true,
-	   Invite = "ZB79MM6DHj",
-	   RememberJoins = true
-	},
-	KeySystem = true,
-	KeySettings = {
-	   Title = "ShadowX Hub",
-	   Subtitle = "Key System",
-	   Note = "Get a Key",
-	   FileName = "SiriusKey",
-	   SaveKey = true,
-	   GrabKeyFromSite = false,
-	   Key = {"ShadowX", "ShadowY"}
-	}
+    Name = "ShadowX Hub",
+    LoadingTitle = "Cargando...",
+    LoadingSubtitle = "by Lobo27",
+    ConfigurationSaving = {
+        Enabled = true,
+        FolderName = nil,
+        FileName = "ShadowX Hub"
+    },
+    Discord = {
+        Enabled = true,
+        Invite = "ZB79MM6DHj",
+        RememberJoins = true
+    },
+    KeySystem = false -- Desactivado para pruebas
 })
 
 local MainTab = MainWindow:CreateTab("Principal", "map-pin")
@@ -32,34 +24,88 @@ local ScannerTab = MainWindow:CreateTab("Scanner", "search")
 local SaveTab = MainWindow:CreateTab("Guardar", "file")
 local OthersTab = MainWindow:CreateTab("Otros", "circle-ellipsis")
 
--- ========== OTROS ==========
-
-local Button = OthersTab:CreateButton({
-   Name = "Default Theme",
-   Callback = function(Default)
-    local Default = MainWindow.ModifyTheme('Default')
-   end,
-})
-
-local Button = OthersTab:CreateButton({
-   Name = "Amber Glow Theme",
-   Callback = function(AmberGlow)
-    local AmberGlow = MainWindow.ModifyTheme('AmberGlow')
-   end,
-})
-
--- ========== PRINCIPAL ==========
-
+-- ========== SERVICIOS ==========
 local UserInputService = game:GetService("UserInputService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 local HttpService = game:GetService("HttpService")
+local RunService = game:GetService("RunService")
 local localPlayer = Players.LocalPlayer
 
+-- ========== VARIABLES GLOBALES ==========
 local infiniteJumpConnection
 local infiniteJumpEnabled = false
+local furnitureCount = 0
+local furnitureCost = 0
+local textureCost = 0
+local progress = 0
+local houseData = nil
+local houseUrl = ""
+local walkSpeedValue = 16
+local jumpPowerValue = 50
 
+-- ========== ETIQUETAS ==========
+local Label1 = HouseTab:CreateLabel("Furnitures count: " .. furnitureCount, "sofa")
+local Label2 = HouseTab:CreateLabel("Furnitures cost: $" .. furnitureCost, "badge-dollar-sign")
+local Label3 = HouseTab:CreateLabel("Textures cost: $" .. textureCost, "paint-roller")
+local Label4 = HouseTab:CreateLabel("Progress: " .. progress .. "%", "loader")
+local Label5 = ScannerTab:CreateLabel("Home Type: Unknown", "milestone")
+
+-- ========== OTROS ==========
+local Button = OthersTab:CreateButton({
+    Name = "Default Theme",
+    Callback = function()
+        MainWindow.ModifyTheme('Default')
+    end,
+})
+
+local Button = OthersTab:CreateButton({
+    Name = "Amber Glow Theme",
+    Callback = function()
+        MainWindow.ModifyTheme('AmberGlow')
+    end,
+})
+
+-- ========== PRINCIPAL ==========
+-- Funciones de movimiento
+local function setWalkSpeed(v)
+    walkSpeedValue = v
+    local char = localPlayer.Character
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    if hum then
+        pcall(function() hum.WalkSpeed = tonumber(v) or 16 end)
+    end
+end
+
+local function setJumpPower(v)
+    jumpPowerValue = v
+    local char = localPlayer.Character
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    if hum then
+        pcall(function() hum.JumpPower = tonumber(v) or 50 end)
+    end
+end
+
+-- Conexiones de personaje
+localPlayer.CharacterAdded:Connect(function(char)
+    local hum = char:WaitForChild("Humanoid", 5)
+    if hum then
+        pcall(function() 
+            hum.WalkSpeed = walkSpeedValue
+            hum.JumpPower = jumpPowerValue
+        end)
+    end
+end)
+
+localPlayer.CharacterRemoving:Connect(function()
+    if infiniteJumpConnection then
+        infiniteJumpConnection:Disconnect()
+        infiniteJumpConnection = nil
+    end
+end)
+
+-- Controles
 local ToggleInfiniteJump = MainTab:CreateToggle({
     Name = "Salto Infinito",
     CurrentValue = false,
@@ -85,30 +131,6 @@ local ToggleInfiniteJump = MainTab:CreateToggle({
     end,
 })
 
-localPlayer.CharacterRemoving:Connect(function()
-    if infiniteJumpConnection then
-        infiniteJumpConnection:Disconnect()
-        infiniteJumpConnection = nil
-    end
-end)
-
-local walkSpeedValue = 16
-local function setWalkSpeed(v)
-    walkSpeedValue = v
-    local char = localPlayer.Character
-    local hum = char and char:FindFirstChildOfClass("Humanoid")
-    if hum then
-        pcall(function() hum.WalkSpeed = tonumber(v) or 16 end)
-    end
-end
-
-localPlayer.CharacterAdded:Connect(function(char)
-    local hum = char:WaitForChild("Humanoid", 5)
-    if hum then
-        pcall(function() hum.WalkSpeed = walkSpeedValue end)
-    end
-end)
-
 local SliderWalkSpeed = MainTab:CreateSlider({
     Name = "Velocidad al Caminar",
     Range = {10, 250},
@@ -120,23 +142,6 @@ local SliderWalkSpeed = MainTab:CreateSlider({
         setWalkSpeed(v)
     end,
 })
-
-local jumpPowerValue = 50
-local function setJumpPower(v)
-    jumpPowerValue = v
-    local char = localPlayer.Character
-    local hum = char and char:FindFirstChildOfClass("Humanoid")
-    if hum then
-        pcall(function() hum.JumpPower = tonumber(v) or 50 end)
-    end
-end
-
-localPlayer.CharacterAdded:Connect(function(char)
-    local hum = char:WaitForChild("Humanoid", 5)
-    if hum then
-        pcall(function() hum.JumpPower = jumpPowerValue end)
-    end
-end)
 
 local SliderJumpPower = MainTab:CreateSlider({
     Name = "Poder de Salto",
@@ -151,22 +156,6 @@ local SliderJumpPower = MainTab:CreateSlider({
 })
 
 -- ========== HOUSE CLONER ==========
-
-local furnitureCount = 0
-local furnitureCost = 0
-local textureCost = 0
-local progress = 0
-
-local Label1 = HouseTab:CreateLabel("Furnitures count: " .. furnitureCount, "sofa")
-local Label2 = HouseTab:CreateLabel("Furnitures cost: $" .. furnitureCost, "badge-dollar-sign")
-local Label3 = HouseTab:CreateLabel("Textures cost: $" .. textureCost, "paint-roller")
-local Label4 = HouseTab:CreateLabel("Progress: " .. progress .. "%", "loader")
-
-local Divider = HouseTab:CreateDivider()
-
-local houseData = nil
-local houseUrl = ""
-
 -- Base de datos de precios de muebles
 local furniturePrices = {
     ["brick"] = 50,
@@ -189,32 +178,18 @@ local furniturePrices = {
     ["default"] = 50
 }
 
-local Input = HouseTab:CreateInput({
-   Name = "House Pastebin",
-   CurrentValue = "",
-   PlaceholderText = "https://pastebin.com/",
-   RemoveTextAfterFocusLost = false,
-   Flag = "Input1",
-   Callback = function(Text)
-      houseUrl = Text
-   end,
-})
-
--- Función para obtener CFrame de cualquier objeto (BasePart o Model)
+-- Funciones auxiliares
 local function getCFrame(obj)
     if obj:IsA("BasePart") then
         return obj.CFrame
     elseif obj:IsA("Model") then
-        -- Para modelos, usar PrimaryPart o calcular el centro
         if obj.PrimaryPart then
             return obj.PrimaryPart.CFrame
         else
-            -- Buscar la primera BasePart
             local firstPart = obj:FindFirstChildWhichIsA("BasePart")
             if firstPart then
                 return firstPart.CFrame
             else
-                -- Fallback: usar la posición promedio
                 local totalPos = Vector3.new(0, 0, 0)
                 local count = 0
                 for _, part in pairs(obj:GetDescendants()) do
@@ -234,7 +209,6 @@ local function getCFrame(obj)
     return CFrame.new(0, 0, 0)
 end
 
--- Función para convertir CFrame a array
 local function cframeToArray(cf)
     local pos = cf.Position
     local x, y, z = pos.X, pos.Y, pos.Z
@@ -251,7 +225,6 @@ local function cframeToArray(cf)
     }
 end
 
--- Función para obtener el tipo de casa
 local function getBuildingType()
     local playerHouse = Workspace:FindFirstChild(localPlayer.Name .. "'s House")
     if playerHouse then
@@ -267,12 +240,10 @@ local function getBuildingType()
     return "Tiny Home"
 end
 
--- Función mejorada para identificar muebles válidos
 local function isValidFurniture(obj)
     if not obj then return false end
     if not (obj:IsA("BasePart") or obj:IsA("Model")) then return false end
     
-    -- Excluir partes del cuerpo
     local bodyParts = {
         "HumanoidRootPart", "Torso", "Head", "Left Arm", "Right Arm", 
         "Left Leg", "Right Leg", "UpperTorso", "LowerTorso", "LeftHand", 
@@ -283,16 +254,13 @@ local function isValidFurniture(obj)
         if obj.Name == bodyPart then return false end
     end
     
-    -- Excluir tipos específicos
     if obj:IsA("Seat") or obj:IsA("VehicleSeat") or obj:IsA("SpawnLocation") then 
         return false 
     end
     
     if obj:IsA("BasePart") then
-        -- Los muebles típicamente están anclados
         if obj.Anchored == false then return false end
         
-        -- Excluir partes estructurales
         local excludedNames = {
             "ground", "floor", "wall", "roof", "ceiling", "baseplate",
             "terrain", "map", "world", "boundary", "sky", "water", "lava"
@@ -305,7 +273,6 @@ local function isValidFurniture(obj)
             end
         end
         
-        -- Excluir partes extremadamente grandes o pequeñas
         if obj.Size.X > 100 or obj.Size.Y > 100 or obj.Size.Z > 100 then
             return false
         end
@@ -314,7 +281,6 @@ local function isValidFurniture(obj)
             return false
         end
     elseif obj:IsA("Model") then
-        -- Para modelos, verificar que tengan partes
         local hasParts = false
         for _, child in pairs(obj:GetChildren()) do
             if child:IsA("BasePart") then
@@ -324,7 +290,6 @@ local function isValidFurniture(obj)
         end
         if not hasParts then return false end
         
-        -- Excluir modelos con nombre de entorno
         local excludedNames = {
             "ground", "floor", "wall", "roof", "ceiling", "baseplate",
             "terrain", "map", "world", "boundary", "sky", "water", "lava"
@@ -341,14 +306,12 @@ local function isValidFurniture(obj)
     return true
 end
 
--- Función para obtener ID del mueble
 local function getFurnitureId(obj)
     if not obj then return "unknown" end
     
     local originalName = obj.Name
     local name = originalName:lower()
     
-    -- Mapeo de nombres comunes
     local nameMapping = {
         ["brick"] = "brick",
         ["disk"] = "medium_disk",
@@ -391,7 +354,6 @@ local function getFurnitureId(obj)
     return originalName:lower()
 end
 
--- Función para obtener colores
 local function getFurnitureColors(obj)
     local colors = {}
     
@@ -403,7 +365,6 @@ local function getFurnitureColors(obj)
             table.insert(colors, {1, 1, 1})
         end
     elseif obj:IsA("Model") then
-        -- Para modelos, obtener colores de las partes principales
         local foundColor = false
         for _, part in pairs(obj:GetDescendants()) do
             if part:IsA("BasePart") then
@@ -423,7 +384,6 @@ local function getFurnitureColors(obj)
     return colors
 end
 
--- Función para calcular escala
 local function getFurnitureScale(obj)
     if obj:IsA("BasePart") then
         local avgSize = (obj.Size.X + obj.Size.Y + obj.Size.Z) / 3
@@ -441,7 +401,6 @@ local function scanHouseFurniture()
     local furnitureData = {}
     local buildingType = getBuildingType()
     
-    -- Buscar en ubicaciones típicas
     local searchLocations = {}
     
     local playerHouse = Workspace:FindFirstChild(localPlayer.Name .. "'s House")
@@ -475,7 +434,6 @@ local function scanHouseFurniture()
                 if isValidFurniture(obj) and not scannedObjects[obj] then
                     scannedObjects[obj] = true
                     
-                    -- Verificar que no sea parte del entorno
                     local isEnvironment = false
                     local objName = obj.Name:lower()
                     
@@ -496,7 +454,7 @@ local function scanHouseFurniture()
                         
                         local furnitureId = getFurnitureId(obj)
                         local colors = getFurnitureColors(obj)
-                        local objCFrame = getCFrame(obj) -- Usar la función corregida
+                        local objCFrame = getCFrame(obj)
                         local cframeArray = cframeToArray(objCFrame)
                         local scale = getFurnitureScale(obj)
                         
@@ -533,210 +491,283 @@ local function scanHouseFurniture()
     return houseDataFormatted, furnitureCount, totalCost, textureCostTotal
 end
 
+-- Función para crear muebles en Adopt Me
+local function createFurnitureInAdoptMe(furnitureId, cframeData)
+    -- Buscar el contenedor de muebles en Adopt Me
+    local furnitureContainers = {
+        workspace:FindFirstChild("HouseFurnitures"),
+        workspace:FindFirstChild("Furniture"),
+        ReplicatedStorage:FindFirstChild("HouseFurnitures"),
+        ReplicatedStorage:FindFirstChild("Furniture")
+    }
+    
+    local furnitureModel = nil
+    
+    -- Buscar el mueble en los contenedores
+    for _, container in pairs(furnitureContainers) do
+        if container then
+            furnitureModel = container:FindFirstChild(furnitureId)
+            if furnitureModel then break end
+        end
+    end
+    
+    -- Si no se encuentra, buscar por nombres similares
+    if not furnitureModel then
+        for _, container in pairs(furnitureContainers) do
+            if container then
+                for _, item in pairs(container:GetChildren()) do
+                    if item.Name:lower():find(furnitureId:lower()) then
+                        furnitureModel = item
+                        break
+                    end
+                end
+                if furnitureModel then break end
+            end
+        end
+    end
+    
+    if furnitureModel then
+        local newFurniture = furnitureModel:Clone()
+        newFurniture.Parent = workspace
+        
+        -- Aplicar posición y rotación
+        if cframeData and #cframeData >= 12 then
+            local cf = CFrame.new(
+                cframeData[1], cframeData[2], cframeData[3],
+                cframeData[4], cframeData[5], cframeData[6],
+                cframeData[7], cframeData[8], cframeData[9],
+                cframeData[10], cframeData[11], cframeData[12]
+            )
+            newFurniture:PivotTo(cf)
+        end
+        
+        return newFurniture
+    end
+    
+    return nil
+end
+
+-- Botones de House Cloner
 local Button = HouseTab:CreateButton({
-   Name = "Copy House",
-   Callback = function()
-      Rayfield:Notify({
-         Title = "Scanning House",
-         Content = "Please wait...",
-         Duration = 2,
-         Image = "loader"
-      })
-      
-      wait(0.5)
-      
-      local success, result = pcall(function()
-         return scanHouseFurniture()
-      end)
-      
-      if success then
-         local houseDataFormatted, count, cost, texCost = result[1], result[2], result[3], result[4]
-         
-         if count > 0 and count < 1000 then
-            furnitureCount = count
-            furnitureCost = cost
-            textureCost = texCost
-            houseData = houseDataFormatted
+    Name = "Copy House",
+    Callback = function()
+        Rayfield:Notify({
+            Title = "Scanning House",
+            Content = "Please wait...",
+            Duration = 2,
+            Image = "loader"
+        })
+        
+        wait(0.5)
+        
+        local success, result = pcall(function()
+            return scanHouseFurniture()
+        end)
+        
+        if success then
+            local houseDataFormatted, count, cost, texCost = result[1], result[2], result[3], result[4]
             
-            Label1:Set("Furnitures count: " .. furnitureCount)
-            Label2:Set("Furnitures cost: $" .. furnitureCost)
-            Label3:Set("Textures cost: $" .. textureCost)
-            
+            if count > 0 and count < 1000 then
+                furnitureCount = count
+                furnitureCost = cost
+                textureCost = texCost
+                houseData = houseDataFormatted
+                
+                Label1:Set("Furnitures count: " .. furnitureCount)
+                Label2:Set("Furnitures cost: $" .. furnitureCost)
+                Label3:Set("Textures cost: $" .. textureCost)
+                
+                Rayfield:Notify({
+                    Title = "House Copied!",
+                    Content = "Successfully copied " .. furnitureCount .. " furnitures",
+                    Duration = 4,
+                    Image = "check"
+                })
+                
+                print("House Data JSON:")
+                local jsonData = HttpService:JSONEncode(houseDataFormatted)
+                print(jsonData)
+                
+                pcall(function()
+                    if setclipboard then
+                        setclipboard(jsonData)
+                        print("Data copied to clipboard!")
+                    end
+                end)
+            elseif count >= 1000 then
+                Rayfield:Notify({
+                    Title = "Too Many Items",
+                    Content = "Found " .. count .. " items. This seems incorrect.",
+                    Duration = 4,
+                    Image = "x"
+                })
+            else
+                Rayfield:Notify({
+                    Title = "No Furnitures Found",
+                    Content = "Could not find any furniture in the house",
+                    Duration = 4,
+                    Image = "x"
+                })
+            end
+        else
             Rayfield:Notify({
-               Title = "House Copied!",
-               Content = "Successfully copied " .. furnitureCount .. " furnitures",
-               Duration = 4,
-               Image = "check"
+                Title = "Error",
+                Content = "Scan failed: " .. tostring(result),
+                Duration = 4,
+                Image = "x"
             })
-            
-            print("House Data JSON:")
-            local jsonData = HttpService:JSONEncode(houseDataFormatted)
-            print(jsonData)
-            
-            pcall(function()
-               if setclipboard then
-                  setclipboard(jsonData)
-                  print("Data copied to clipboard!")
-               end
-            end)
-         elseif count >= 1000 then
-            Rayfield:Notify({
-               Title = "Too Many Items",
-               Content = "Found " .. count .. " items. This seems incorrect.",
-               Duration = 4,
-               Image = "x"
-            })
-         else
-            Rayfield:Notify({
-               Title = "No Furnitures Found",
-               Content = "Could not find any furniture in the house",
-               Duration = 4,
-               Image = "x"
-            })
-         end
-      else
-         Rayfield:Notify({
-            Title = "Error",
-            Content = "Scan failed: " .. tostring(result),
-            Duration = 4,
-            Image = "x"
-         })
-         print("Error en escaneo:", result)
-      end
-   end,
+            print("Error en escaneo:", result)
+        end
+    end,
 })
 
 local Button = HouseTab:CreateButton({
-   Name = "Paste House",
-   Callback = function()
-      if not houseData then
-         Rayfield:Notify({
-            Title = "Error",
-            Content = "No house data found. Please copy a house first.",
-            Duration = 4,
-            Image = "x"
-         })
-         return
-      end
-      
-      Rayfield:Notify({
-         Title = "Pasting House",
-         Content = "Placing " .. furnitureCount .. " furnitures...",
-         Duration = 2,
-         Image = "loader"
-      })
-      
-      local totalFurniture = 0
-      for _ in pairs(houseData.furniture) do
-         totalFurniture = totalFurniture + 1
-      end
-      
-      print("Iniciando colocación de", totalFurniture, "muebles")
-      
-      local placedCount = 0
-      local startTime = tick()
-      
-      for furnitureId, furniture in pairs(houseData.furniture) do
-         placedCount = placedCount + 1
-         
-         print("Colocando:", furniture.id)
-         
-         if placedCount % 20 == 0 or placedCount == totalFurniture then
-            local progressPercent = math.floor((placedCount / totalFurniture) * 100)
-            Label4:Set("Progress: " .. progressPercent .. "%")
-            
-            game:GetService("RunService").Heartbeat:Wait()
-         end
-         
-         if placedCount == totalFurniture then
-            local endTime = tick()
-            local timeTaken = string.format("%.2f", endTime - startTime)
-            
+    Name = "Paste House",
+    Callback = function()
+        if not houseData then
             Rayfield:Notify({
-               Title = "Success!",
-               Content = "House pasted successfully! (" .. placedCount .. " items in " .. timeTaken .. "s)",
-               Duration = 4,
-               Image = "check"
+                Title = "Error",
+                Content = "No house data found. Please copy a house first.",
+                Duration = 4,
+                Image = "x"
             })
-            print("Colocación completada en", timeTaken, "segundos")
-         end
-      end
-   end,
+            return
+        end
+        
+        Rayfield:Notify({
+            Title = "Pasting House",
+            Content = "Placing " .. furnitureCount .. " furnitures...",
+            Duration = 2,
+            Image = "loader"
+        })
+        
+        local totalFurniture = 0
+        for _ in pairs(houseData.furniture) do
+            totalFurniture = totalFurniture + 1
+        end
+        
+        print("Iniciando colocación de", totalFurniture, "muebles")
+        
+        local placedCount = 0
+        local startTime = tick()
+        
+        for furnitureId, furniture in pairs(houseData.furniture) do
+            placedCount = placedCount + 1
+            
+            print("Colocando:", furniture.id)
+            
+            -- Crear el mueble en el mundo
+            local success, result = pcall(function()
+                return createFurnitureInAdoptMe(furniture.id, furniture.cframe)
+            end)
+            
+            if not success then
+                print("Error creando mueble:", furniture.id, result)
+            end
+            
+            if placedCount % 10 == 0 or placedCount == totalFurniture then
+                local progressPercent = math.floor((placedCount / totalFurniture) * 100)
+                Label4:Set("Progress: " .. progressPercent .. "%")
+                RunService.Heartbeat:Wait()
+            end
+            
+            if placedCount == totalFurniture then
+                local endTime = tick()
+                local timeTaken = string.format("%.2f", endTime - startTime)
+                
+                Rayfield:Notify({
+                    Title = "Success!",
+                    Content = "House pasted successfully! (" .. placedCount .. " items in " .. timeTaken .. "s)",
+                    Duration = 4,
+                    Image = "check"
+                })
+                print("Colocación completada en", timeTaken, "segundos")
+            end
+        end
+    end,
 })
 
 -- ========== SCANNER ==========
-
-local homeType = "Unknown"
-local Label5 = ScannerTab:CreateLabel("Home Type: " .. homeType, "milestone")
-
 local Button = ScannerTab:CreateButton({
-   Name = "Scan House",
-   Callback = function()
-      local scan_notify = Rayfield:Notify({
-         Title = "Scanning Home..",
-         Content = "Starting Scan",
-         Duration = 1,
-         Image = "play",
-      })
-      
-      wait(0.5)
-      
-      local success, result = pcall(function()
-         return scanHouseFurniture()
-      end)
-      
-      if success then
-         local houseDataFormatted, count, cost, texCost = result[1], result[2], result[3], result[4]
-         homeType = houseDataFormatted.building_type
-         
-         Label5:Set("Home Type: " .. homeType)
-         
-         if count > 0 and count < 1000 then
-            furnitureCount = count
-            furnitureCost = cost
-            textureCost = texCost
+    Name = "Scan House",
+    Callback = function()
+        local scan_notify = Rayfield:Notify({
+            Title = "Scanning Home..",
+            Content = "Starting Scan",
+            Duration = 1,
+            Image = "play",
+        })
+        
+        wait(0.5)
+        
+        local success, result = pcall(function()
+            return scanHouseFurniture()
+        end)
+        
+        if success then
+            local houseDataFormatted, count, cost, texCost = result[1], result[2], result[3], result[4]
+            local homeType = houseDataFormatted.building_type
             
-            Label1:Set("Furnitures count: " .. furnitureCount)
-            Label2:Set("Furnitures cost: $" .. furnitureCost)
-            Label3:Set("Textures cost: $" .. textureCost)
+            Label5:Set("Home Type: " .. homeType)
             
+            if count > 0 and count < 1000 then
+                furnitureCount = count
+                furnitureCost = cost
+                textureCost = texCost
+                
+                Label1:Set("Furnitures count: " .. furnitureCount)
+                Label2:Set("Furnitures cost: $" .. furnitureCost)
+                Label3:Set("Textures cost: $" .. textureCost)
+                
+                Rayfield:Notify({
+                    Title = "Scan Complete",
+                    Content = "Found " .. count .. " items in house (" .. homeType .. ")",
+                    Duration = 3,
+                    Image = "check"
+                })
+                
+                print("Formatted House Data:")
+                local jsonData = HttpService:JSONEncode(houseDataFormatted)
+                print(jsonData)
+            elseif count >= 1000 then
+                Rayfield:Notify({
+                    Title = "Error",
+                    Content = "Too many items found (" .. count .. "). Scan failed.",
+                    Duration = 4,
+                    Image = "x"
+                })
+            else
+                Rayfield:Notify({
+                    Title = "No Items Found",
+                    Content = "Could not find any items in the house",
+                    Duration = 4,
+                    Image = "x"
+                })
+            end
+        else
             Rayfield:Notify({
-               Title = "Scan Complete",
-               Content = "Found " .. count .. " items in house (" .. homeType .. ")",
-               Duration = 3,
-               Image = "check"
+                Title = "Scan Error",
+                Content = "Failed to scan: " .. tostring(result),
+                Duration = 4,
+                Image = "x"
             })
-            
-            print("Formatted House Data:")
-            local jsonData = HttpService:JSONEncode(houseDataFormatted)
-            print(jsonData)
-         elseif count >= 1000 then
-            Rayfield:Notify({
-               Title = "Error",
-               Content = "Too many items found (" .. count .. "). Scan failed.",
-               Duration = 4,
-               Image = "x"
-            })
-         else
-            Rayfield:Notify({
-               Title = "No Items Found",
-               Content = "Could not find any items in the house",
-               Duration = 4,
-               Image = "x"
-            })
-         end
-      else
-         Rayfield:Notify({
-            Title = "Scan Error",
-            Content = "Failed to scan: " .. tostring(result),
-            Duration = 4,
-            Image = "x"
-         })
-         print("Error en escaneo:", result)
-      end
-   end,
+            print("Error en escaneo:", result)
+        end
+    end,
+})
+
+-- ========== INPUT PARA PASTEBIN ==========
+local Input = HouseTab:CreateInput({
+    Name = "House Pastebin",
+    CurrentValue = "",
+    PlaceholderText = "https://pastebin.com/",
+    RemoveTextAfterFocusLost = false,
+    Flag = "Input1",
+    Callback = function(Text)
+        houseUrl = Text
+    end,
 })
 
 -- ========== CONSOLE MESSAGE ==========
 print("ShadowX Hub ha cargado correctamente")
-print("El script maneja correctamente Models y BaseParts")
+print("Script actualizado para Adopt Me")
