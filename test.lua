@@ -1,5 +1,6 @@
 -- Cargar Rayfield Interface Suite
-local Rayfield = loadstring(game:HttpGet("https://raw.githubusercontent.com/SiriusSoftwareLtd/Rayfield/main/source"))()
+local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/SiriusSoftwareLtd/Rayfield/main/source.lua"))()
+local Rayfield = library
 
 -- Crear ventana principal
 local Window = Rayfield:CreateWindow({
@@ -20,10 +21,10 @@ local Window = Rayfield:CreateWindow({
 })
 
 -- Crear pestaña principal
-local MainTab = Window:CreateTab("Gestor de Casas", 1234567890) -- Icono placeholder
+local MainTab = Window:CreateTab("Gestor de Casas", 4483362458)
 
 -- Sección para copiar casa
-local CopySection = MainTab:CreateSection("Copiar Casa")
+MainTab:CreateSection("Copiar Casa")
 
 -- Variables para almacenar datos simulados
 local CopiedHouseData = {
@@ -33,13 +34,13 @@ local CopiedHouseData = {
 }
 
 -- Botón para copiar casa (simulado)
-local CopyButton = MainTab:CreateButton({
+MainTab:CreateButton({
     Name = "Copiar Casa Actual",
     Callback = function()
         -- Esto es simulado - no interactúa con el juego real
         Rayfield:Notify({
             Title = "Casa Copiada",
-            Content = "Datos de la casa han sido copiados al portapapeles virtual",
+            Content = "Datos de la casa han sido copiados",
             Duration = 3,
             Image = 4483362458,
         })
@@ -51,17 +52,16 @@ local CopyButton = MainTab:CreateButton({
         
         -- Actualizar la interfaz con los nuevos datos
         if StatsLabel then
-            StatsLabel:Set(string.format("Muebles: %d | Valor: $%d", 
-                CopiedHouseData.FurnitureCount, CopiedHouseData.TotalValue))
+            StatsLabel:Set("Muebles: " .. CopiedHouseData.FurnitureCount .. " | Valor: $" .. CopiedHouseData.TotalValue)
         end
     end,
 })
 
 -- Sección para pegar casa
-local PasteSection = MainTab:CreateSection("Pegar Casa")
+MainTab:CreateSection("Pegar Casa")
 
 -- Botón para pegar casa (simulado)
-local PasteButton = MainTab:CreateButton({
+MainTab:CreateButton({
     Name = "Pegar Casa Copiada",
     Callback = function()
         if CopiedHouseData.FurnitureCount == 0 then
@@ -77,8 +77,7 @@ local PasteButton = MainTab:CreateButton({
         -- Simular pegado de casa
         Rayfield:Notify({
             Title = "Casa Pegada",
-            Content = string.format("Se pegaron %d muebles por valor total de $%d", 
-                CopiedHouseData.FurnitureCount, CopiedHouseData.TotalValue),
+            Content = "Se pegaron " .. CopiedHouseData.FurnitureCount .. " muebles por valor total de $" .. CopiedHouseData.TotalValue,
             Duration = 5,
             Image = 4483362458,
         })
@@ -86,16 +85,13 @@ local PasteButton = MainTab:CreateButton({
 })
 
 -- Sección de estadísticas
-local StatsSection = MainTab:CreateSection("Estadísticas de la Casa")
+MainTab:CreateSection("Estadísticas de la Casa")
 
 -- Label para mostrar estadísticas
-local StatsLabel = MainTab:CreateLabel({
-    Text = "Muebles: 0 | Valor: $0",
-    Flag = "StatsDisplay"
-})
+local StatsLabel = MainTab:CreateLabel("Muebles: 0 | Valor: $0")
 
 -- Botón para actualizar estadísticas
-local RefreshStatsButton = MainTab:CreateButton({
+MainTab:CreateButton({
     Name = "Actualizar Estadísticas",
     Callback = function()
         -- Simular actualización de estadísticas
@@ -106,19 +102,17 @@ local RefreshStatsButton = MainTab:CreateButton({
             Image = 4483362458,
         })
         
-        StatsLabel:Set(string.format("Muebles: %d | Valor: $%d", 
-            CopiedHouseData.FurnitureCount, CopiedHouseData.TotalValue))
+        StatsLabel:Set("Muebles: " .. CopiedHouseData.FurnitureCount .. " | Valor: $" .. CopiedHouseData.TotalValue)
     end,
 })
 
 -- Sección de herramientas adicionales
-local ToolsSection = MainTab:CreateSection("Herramientas")
+MainTab:CreateSection("Herramientas")
 
 -- Toggle para modo avanzado (ejemplo)
-local AdvancedModeToggle = MainTab:CreateToggle({
+MainTab:CreateToggle({
     Name = "Modo Avanzado",
     CurrentValue = false,
-    Flag = "AdvancedMode",
     Callback = function(Value)
         if Value then
             Rayfield:Notify({
@@ -137,7 +131,7 @@ local AdvancedModeToggle = MainTab:CreateToggle({
 })
 
 -- Input para nombre personalizado
-local HouseNameInput = MainTab:CreateInput({
+MainTab:CreateInput({
     Name = "Nombre de la Casa",
     PlaceholderText = "Ingresa un nombre para la casa",
     RemoveTextAfterFocusLost = false,
@@ -156,13 +150,10 @@ local HouseNameInput = MainTab:CreateInput({
 MainTab:CreateDivider()
 
 -- Sección de información
-local InfoSection = MainTab:CreateSection("Información")
+MainTab:CreateSection("Información")
 
 -- Label informativa
-MainTab:CreateLabel({
-    Text = "Esta interfaz es una demostración de Rayfield\nNo interactúa con el juego real",
-    Flag = "InfoText"
-})
+MainTab:CreateLabel("Esta interfaz es una demostración de Rayfield\nNo interactúa con el juego real")
 
 -- Notificación inicial
 Rayfield:Notify({
